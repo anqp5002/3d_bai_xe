@@ -8,12 +8,15 @@ import type { ExportLog, ExportOutput, ExportProgress } from '../export/runExpor
 import { useSimStore } from '../store/simStore';
 import { loadCarTemplates } from './carAssets';
 import { startScenarioExport, type ScenarioExportHandle } from './exportAdapter';
+import { techgarImageSize } from '../export/techgarConfig';
 
+const CAM_SIZE = techgarImageSize();
+const CAM_LABEL = `${String(CAM_SIZE.width)}×${String(CAM_SIZE.height)}`;
 const OUTPUTS: readonly ExportOutput[] = ['full', 'cam1', 'cam2'];
 const OUTPUT_LABEL: Readonly<Record<ExportOutput, string>> = {
   full: 'full 640×640',
-  cam1: 'cam1 400×640',
-  cam2: 'cam2 400×640',
+  cam1: `cam1 ${CAM_LABEL}`,
+  cam2: `cam2 ${CAM_LABEL}`,
 };
 const NAME_RE = /^[A-Za-z0-9_-]{1,40}$/;
 
@@ -189,8 +192,8 @@ export function ExportPanel() {
         <p className="hint">Chế độ 1 cam chỉ xuất full + GT (ANS_1 A.1).</p>
       )}
       <p className="hint">
-        Xuất dùng <b>WebCodecs H.264 + mediabunny</b> (full 640×640 + cam1/cam2 cắt từ
-        cùng khung). Nếu trình duyệt không encode được H.264 ở đầu ra nào, nút này tự
+        Xuất dùng <b>WebCodecs H.264 + mediabunny</b> (full 640×640 toàn cảnh + cam1/cam2 {CAM_LABEL}
+        cho TechGAR). Nếu trình duyệt không encode được H.264 ở đầu ra nào, nút này tự
         chuyển PNG fallback và ghi rõ lý do bên dưới — không im lặng.
         {scenario !== null
           ? ` Kịch bản hiện tại: ${String(scenario.duration_frames)} frame (~${(
