@@ -66,11 +66,25 @@ export function CarsPanel() {
   const gateNotes = gateNotesFrom(countSlotsPayload);
   const selectCar = useSimStore((store) => store.selectCar);
   const removeSelectedCar = useSimStore((store) => store.removeSelectedCar);
+  const removeCars = useSimStore((store) => store.removeCars);
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const setCarSpeed = useSimStore((store) => store.setCarSpeed);
   const defaultSpeed = useSimStore((store) => store.mapSettings.defaultSpeedKmh);
 
   const cars = state === null ? [] : state.cars.filter((car) => car.state !== 'exited');
   const selectedCar = cars.find((car) => car.id === selectedCarId) ?? null;
+  // Chỉ xe đang đỗ mới rời được; xe đã chọn mà không còn đỗ thì tự bỏ khỏi danh sách.
+  const parkedIds = cars.filter((car) => car.state === 'parked').map((car) => car.id);
+  const checkedParked = parkedIds.filter((id) => checked.has(id));
+  const toggle = (id: string) => {
+    const next = new Set(checked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setChecked(next);
+  };
+  const leaveChecked = () => {
+    if (removeCars(checkedParked)) setChecked(new Set());
+  };
   // Ô trống để báo "ô đã có xe"; form tự tính danh sách đầy đủ (trừ cả sự kiện tương lai).
   const free = lot !== null && state !== null ? freeSlotIds(lot, state) : [];
 
@@ -92,6 +106,35 @@ export function CarsPanel() {
           Xe rời đi
         </button>
       </div>
+
+      <div className="button-row">
+        <button
+          type="button"
+          className="btn primary"
+          onClick={leaveChecked}
+          disabled={checkedParked.length === 0}
+          title="Các xe đã tick sẽ cùng rời ô ở frame hiện tại"
+        >
+          Cho {checkedParked.length} xe đã chọn ra cùng lúc
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setChecked(new Set(parkedIds))}
+          disabled={parkedIds.length === 0}
+        >
+          Chọn tất cả xe đỗ
+        </button>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setChecked(new Set())}
+          disabled={checkedParked.length === 0}
+        >
+          Bỏ chọn
+        </button>
+      </div>
+      <p className="hint">Tick ô vuông đầu dòng để chọn nhiều xe đang đỗ.</p>
 
       {selectedCar === null ? (
         <p className="hint">Chọn một xe trong danh sách hoặc trên khung xem để đổi tốc độ.</p>
@@ -122,7 +165,16 @@ export function CarsPanel() {
 
       <ul className="car-list">
         {cars.map((car) => (
-          <li key={car.id}>
+          <li key={car.id} className="car-item">
+            <input
+              type="checkbox"
+              className="car-check"
+              aria-label={`Chọn ${car.id} để rời đi`}
+              title={car.state === 'parked' ? 'Chọn để rời đi' : 'Chỉ xe đang đỗ mới chọn được'}
+              checked={checked.has(car.id) && car.state === 'parked'}
+              disabled={car.state !== 'parked'}
+              onChange={() => toggle(car.id)}
+            />
             <button
               type="button"
               className={`car-row ${car.id === selectedCarId ? 'selected' : ''}`}

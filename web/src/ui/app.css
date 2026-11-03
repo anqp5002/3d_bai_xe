@@ -482,8 +482,28 @@ select {
   overflow: auto;
 }
 
+.car-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.car-check {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.car-check:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
 .car-row {
   width: 100%;
+  min-width: 0;
   display: grid;
   grid-template-columns: 12px 3rem 3rem minmax(0, 1fr) 2.6rem 2.6rem 4.4rem;
   gap: 5px;

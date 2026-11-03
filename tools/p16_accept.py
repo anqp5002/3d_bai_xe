@@ -10,12 +10,23 @@ ghi ra.
 | occupancy + replay ghi ``predictions.jsonl`` | ``m1_eval.py <RUN>`` | ``<RUN>/m1/metrics.json`` |
 | track (đứt thật, GID dùng chung, cam GID) | ``m1_track_eval.py <RUN> --json …`` | JSON của chính nó |
 | đếm cổng | ``m1_gate_eval.py <RUN>`` | ``<RUN>/m1_gate/gate_result.json`` |
-| R4 video thật | ``real_baseline.py --config-set root`` | ``out/baseline_after.json`` so ``baseline_before.json`` |
+| R4 video thật | ``real_baseline.py --config-set root`` × N lần mỗi trạng thái mã | ``out/baseline_{before,after}_run<i>.json`` |
+
+**P16j — ``--repeat-real N`` (mặc định 3):** mỗi trạng thái mã (``before`` = HEAD,
+``after`` = worktree) chạy ``real_baseline.py`` **N lần**, vì ENTRY/EXIT trên video thật
+dao động giữa các lần (nguồn cấp cổng/`source_unavailable`). Báo **từng lần + trung bình +
+min**; R4 chấm theo **trung bình**:
+
+- trung bình EXIT(after) ≥ trung bình EXIT(before);
+- trung bình ENTRY(after) không giảm;
+- các tiêu chí R4 khác giữ nguyên (GID mới ≤ trước + 10 %, merge/re-id không tăng,
+  occupancy không giảm quá 0,5 điểm).
 
 Chạy::
 
     sim3d\\server\\.venv\\Scripts\\python.exe sim3d/tools/p16_accept.py
     … --only k2,k4 --skip-real      # chạy nhanh khi đang sửa
+    … --only real --repeat-real 5   # đo R4 5 lần mỗi trạng thái (mặc định 3)
 
 Cổng: tối đa **2 run song song**, cặp cổng 8040/8041 và 8050/8051. Cổng 8020–8033 để
 coders-1/coders-2 dùng, script này không đụng. Video thật dùng 8060+ (real_baseline tự
@@ -38,6 +49,7 @@ mã cũ). Không có file thì ghi "không đo" chứ không bịa số.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import shutil
 import subprocess
@@ -82,6 +94,9 @@ REAL_GATE_PORT: Final = 8060
 #: Ngưỡng đĩa (TASK_P16f mục 1).
 MIN_FREE_GB: Final = 3.0
 
+#: Số lần chạy ``real_baseline`` cho MỖI trạng thái mã (TASK_P16j / ANS_24).
+REAL_REPEAT_DEFAULT: Final = 3
+
 #: Ngưỡng nghiệm thu (SPEC_P16 mục 3 + ANS_22).
 K2_HARD_BREAKS_TOTAL: Final = 6
 K2_HARD_BREAKS_MAX: Final = 3
@@ -101,6 +116,10 @@ class InsufficientSpace(RuntimeError):
     """Ổ còn dưới ngưỡng GB — phải dừng, không chạy tiếp."""
 
 
+class ReuseBeforeError(RuntimeError):
+    """``--reuse-before`` trỏ tới file thiếu/sai — dừng và báo rõ, không đoán số."""
+
+
 # ---------------------------------------------------------------------------------------
 # Dòng kết quả
 # ---------------------------------------------------------------------------------------
@@ -117,7 +136,7 @@ class Row:
     after: Any
     threshold: str
     passed: bool | None
-    fmt: str = "int"  # "int" | "pct" | "text"
+    fmt: str = "int"  # "int" | "pct" | "float" | "text"
     note: str = ""
 
     def cell(self, value: Any) -> str:
@@ -125,6 +144,8 @@ class Row:
             return "không đo"
         if self.fmt == "pct":
             return f"{float(value) * 100:.1f} %"
+        if self.fmt == "float":
+            return f"{float(value):.2f}"
         if self.fmt == "int":
             return str(int(value))
         return str(value)
@@ -531,6 +552,195 @@ def _mean_occupancy(doc: dict[str, Any] | None) -> float | None:
     return sum(float(value) for value in values) / len(values) if values else None
 
 
+@dataclass
+class RealRun:
+    """Một lần chạy ``real_baseline.py`` cho một trạng thái mã (P16j)."""
+
+    state: str  # "before" | "after"
+    index: int  # 1..N
+    path: Path
+    doc: dict[str, Any] | None
+    call: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def ok(self) -> bool:
+        return self.doc is not None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "state": self.state,
+            "index": self.index,
+            "path": str(self.path),
+            "ok": self.ok,
+            "call": self.call,
+            "totals": real_run_totals(self.doc),
+        }
+
+
+def real_run_totals(doc: dict[str, Any] | None) -> dict[str, Any]:
+    """Các số R4 của **một lần** chạy (``None`` nếu thiếu)."""
+    totals = (doc or {}).get("totals") or {}
+    return {
+        "entry": _as_int(totals.get("controller_entry")),
+        "exit": _as_int(totals.get("controller_exit")),
+        "manual_in": _as_int(totals.get("manual_vehicles_in")),
+        "manual_out": _as_int(totals.get("manual_vehicles_out")),
+        "new_gid": _as_int(totals.get("new_gid")),
+        "merge": _as_int(totals.get("merge")),
+        "re_id": _as_int(totals.get("re_id")),
+        "occupancy": _mean_occupancy(doc),
+    }
+
+
+def aggregate_real_runs(runs: list[RealRun]) -> dict[str, dict[str, Any]]:
+    """Gom N lần chạy: ``values`` (theo thứ tự), ``mean``, ``min`` cho từng chỉ số."""
+    series: dict[str, list[float]] = {
+        key: [] for key in ("entry", "exit", "new_gid", "merge", "re_id", "occupancy")
+    }
+    for run in runs:
+        totals = real_run_totals(run.doc)
+        for key, values in series.items():
+            value = totals.get(key)
+            if value is not None:
+                values.append(float(value))
+    result: dict[str, dict[str, Any]] = {}
+    for key, values in series.items():
+        result[key] = {
+            "values": values,
+            "mean": sum(values) / len(values) if values else None,
+            "min": min(values) if values else None,
+        }
+    result["runs"] = len(runs)
+    result["ok_runs"] = sum(1 for run in runs if run.ok)
+    return result
+
+
+def _fmt_values(values: list[float]) -> str:
+    return "/".join(f"{value:g}" for value in values) if values else "không đo"
+
+
+def score_real_repeated(
+    before_runs: list[RealRun],
+    after_runs: list[RealRun],
+    *,
+    missing_note: str = "",
+) -> list[Row]:
+    """R4 theo **trung bình N lần** (TASK_P16j / ANS_24).
+
+    Tiêu chí: trung bình EXIT(after) ≥ trung bình EXIT(before); trung bình ENTRY(after)
+    không giảm; các tiêu chí R4 khác giữ nguyên. ``min`` chỉ để xem độ ổn định, không chấm.
+    """
+    scenario = SCENARIO_LABEL["real"]
+    before = aggregate_real_runs(before_runs)
+    after = aggregate_real_runs(after_runs)
+    before_ok = bool(before["ok_runs"])
+    after_ok = bool(after["ok_runs"])
+    if not before_ok or not after_ok:
+        rows = []
+        for metric, threshold in (
+            ("ENTRY trung bình (N lần)", "after ≥ before"),
+            ("EXIT trung bình (N lần)", "after ≥ before"),
+            ("số GID mới (TB N lần)", f"≤ trước + {REAL_NEW_GID_GROWTH:.0%}"),
+            ("[merge] đã hoàn tất (TB)", "≤ trước (không tăng)"),
+            ("[re-id] (TB)", "≤ trước (không tăng)"),
+            ("occupancy trung bình (TB)", f"giảm ≤ {REAL_OCCUPANCY_DROP * 100:.1f} điểm"),
+        ):
+            rows.append(
+                _row(scenario, metric, None, None, threshold, None, note=missing_note)
+            )
+        return rows
+
+    entry_before, entry_after = before["entry"]["mean"], after["entry"]["mean"]
+    exit_before, exit_after = before["exit"]["mean"], after["exit"]["mean"]
+    new_before, new_after = before["new_gid"]["mean"], after["new_gid"]["mean"]
+    merge_before, merge_after = before["merge"]["mean"], after["merge"]["mean"]
+    reid_before, reid_after = before["re_id"]["mean"], after["re_id"]["mean"]
+    occ_before, occ_after = before["occupancy"]["mean"], after["occupancy"]["mean"]
+    new_limit = None if new_before is None else new_before * (1 + REAL_NEW_GID_GROWTH)
+
+    def _series_note(key: str) -> str:
+        """Giá trị từng lần + min (min chỉ để xem độ ổn định, không chấm)."""
+        def _num(value: float | None) -> str:
+            return "không đo" if value is None else f"{value:g}"
+
+        return (
+            f"before {_fmt_values(before[key]['values'])} (min {_num(before[key]['min'])}) · "
+            f"after {_fmt_values(after[key]['values'])} (min {_num(after[key]['min'])})"
+        )
+
+    def _ge_mean(before_value: float | None, after_value: float | None) -> bool | None:
+        if before_value is None or after_value is None:
+            return None
+        return after_value >= before_value
+
+    return [
+        _row(
+            scenario,
+            "ENTRY trung bình (N lần)",
+            entry_before,
+            entry_after,
+            "after ≥ before (không giảm)",
+            _ge_mean(entry_before, entry_after),
+            fmt="float",
+            note=_series_note("entry"),
+        ),
+        _row(
+            scenario,
+            "EXIT trung bình (N lần)",
+            exit_before,
+            exit_after,
+            "after ≥ before (không giảm)",
+            _ge_mean(exit_before, exit_after),
+            fmt="float",
+            note=_series_note("exit"),
+        ),
+        _row(
+            scenario,
+            "số GID mới (TB N lần)",
+            new_before,
+            new_after,
+            f"≤ {new_limit:.2f} (trước + {REAL_NEW_GID_GROWTH:.0%})"
+            if new_limit is not None
+            else f"≤ trước + {REAL_NEW_GID_GROWTH:.0%}",
+            None if new_limit is None or new_after is None else new_after <= new_limit,
+            fmt="float",
+        ),
+        _row(
+            scenario,
+            "[merge] đã hoàn tất (TB)",
+            merge_before,
+            merge_after,
+            "≤ trước (không tăng)",
+            None
+            if merge_before is None or merge_after is None
+            else merge_after <= merge_before,
+            fmt="float",
+        ),
+        _row(
+            scenario,
+            "[re-id] (TB)",
+            reid_before,
+            reid_after,
+            "≤ trước (không tăng)",
+            None
+            if reid_before is None or reid_after is None
+            else reid_after <= reid_before,
+            fmt="float",
+        ),
+        _row(
+            scenario,
+            "occupancy trung bình (TB)",
+            occ_before,
+            occ_after,
+            f"giảm ≤ {REAL_OCCUPANCY_DROP * 100:.1f} điểm",
+            None
+            if occ_before is None or occ_after is None
+            else occ_after >= occ_before - REAL_OCCUPANCY_DROP,
+            fmt="pct",
+        ),
+    ]
+
+
 def score_real(
     before_doc: dict[str, Any] | None,
     after_doc: dict[str, Any] | None,
@@ -645,14 +855,27 @@ def score_all(
     real_before: dict[str, Any] | None,
     real_after: dict[str, Any] | None,
     real_missing_note: str = "",
+    real_before_runs: list[RealRun] | None = None,
+    real_after_runs: list[RealRun] | None = None,
 ) -> list[Row]:
-    """Sinh toàn bộ dòng kết quả theo thứ tự yêu cầu."""
+    """Sinh toàn bộ dòng kết quả theo thứ tự yêu cầu.
+
+    Có ``real_before_runs``/``real_after_runs`` (P16j) thì R4 chấm theo trung bình N lần;
+    không có thì giữ đường cũ (một lần, so ``baseline_before.json``).
+    """
     rows: list[Row] = []
     for name in scenarios:
         if name == "real":
-            rows.extend(
-                score_real(real_before, real_after, missing_note=real_missing_note)
-            )
+            if real_before_runs is not None and real_after_runs is not None:
+                rows.extend(
+                    score_real_repeated(
+                        real_before_runs, real_after_runs, missing_note=real_missing_note
+                    )
+                )
+            else:
+                rows.extend(
+                    score_real(real_before, real_after, missing_note=real_missing_note)
+                )
             continue
         result = sim_results.get(name) or {}
         before = result.get("before") or Bundle()
@@ -852,22 +1075,30 @@ def measure_sim_runs(
 def run_real_baseline(
     out_dir: Path,
     *,
+    code_source: str = "worktree",
+    tag: str = "after",
+    out_path: Path | None = None,
+    markdown_path: Path | None = None,
     min_free_gb: float = MIN_FREE_GB,
     timeout_s: float = 3600.0,
 ) -> dict[str, Any]:
-    """Chạy ``real_baseline.py`` cho trạng thái **sau sửa** và ghi ``baseline_after.json``."""
+    """Chạy ``real_baseline.py`` một lần và trả ``run_tool`` outcome.
+
+    ``code_source``: ``"head"`` = mã đã commit (trạng thái **before**), ``"worktree"`` = mã
+    đang có trên đĩa (trạng thái **after**). ``tag`` tách thư mục chạy giữa các lần.
+    """
     ensure_free_space(out_dir, min_free_gb)
-    target = out_dir / "baseline_after.json"
-    markdown = out_dir / "baseline_after.md"
+    target = out_path or (out_dir / f"baseline_{tag}.json")
+    markdown = markdown_path or (out_dir / f"baseline_{tag}.md")
     return run_tool(
         "real_baseline",
         [
             "--code-source",
-            "worktree",
+            code_source,
             "--config-set",
             "root",
             "--tag",
-            "after",
+            tag,
             "--out",
             str(target),
             "--markdown",
@@ -879,9 +1110,136 @@ def run_real_baseline(
             "--min-free-gb",
             str(min_free_gb),
         ],
-        out_dir / OUTPUT_SUBDIR / "real_baseline__after.log",
+        out_dir / OUTPUT_SUBDIR / f"real_baseline__{tag}.log",
         timeout_s,
     )
+
+
+def measure_real_state(
+    state: str,
+    repeat: int,
+    out_dir: Path,
+    *,
+    min_free_gb: float = MIN_FREE_GB,
+    timeout_s: float = 3600.0,
+) -> list[RealRun]:
+    """Chạy ``real_baseline`` **N lần** cho một trạng thái mã (P16j).
+
+    ``state="before"`` dùng ``--code-source head``, ``state="after"`` dùng ``worktree``.
+    Mỗi lần ghi ``out/baseline_<state>_run<i>.json`` và tag riêng để không ghi đè
+    ``m1_gate/`` của lần trước. Kiểm đĩa **trước từng lần**.
+    """
+    code_source = "head" if state == "before" else "worktree"
+    runs: list[RealRun] = []
+    for index in range(1, repeat + 1):
+        out_path = out_dir / f"baseline_{state}_run{index}.json"
+        markdown_path = out_dir / f"baseline_{state}_run{index}.md"
+        call = run_real_baseline(
+            out_dir,
+            code_source=code_source,
+            tag=f"{state}{index}",
+            out_path=out_path,
+            markdown_path=markdown_path,
+            min_free_gb=min_free_gb,
+            timeout_s=timeout_s,
+        )
+        runs.append(
+            RealRun(
+                state=state,
+                index=index,
+                path=out_path,
+                doc=_load_json(out_path),
+                call=call,
+            )
+        )
+    return runs
+
+
+#: Các khoá ``totals`` bắt buộc phải có trong file before dùng lại (TASK_P16l).
+REUSE_REQUIRED_TOTALS: Final[tuple[str, ...]] = (
+    "controller_entry",
+    "controller_exit",
+    "new_gid",
+    "merge",
+    "re_id",
+)
+
+
+def expand_reuse_before(specs: list[str]) -> list[Path]:
+    """Mở ``--reuse-before`` thành danh sách file: thư mục, glob, hoặc từng file.
+
+    - thư mục → mọi ``baseline_before*.json`` trong đó (sắp theo tên);
+    - có ``*``/``?``/``[`` → glob;
+    - còn lại → đúng file đó.
+
+    Không khớp gì ⇒ :class:`ReuseBeforeError` (không đoán, không chạy lại).
+    """
+    if not specs:
+        raise ReuseBeforeError("--reuse-before cần ít nhất một file/thư mục/glob")
+    paths: list[Path] = []
+    for spec in specs:
+        candidate = Path(spec)
+        if any(char in spec for char in "*?["):
+            matches = sorted(Path(match) for match in glob.glob(spec, recursive=True))
+            if not matches:
+                raise ReuseBeforeError(f"glob {spec!r} không khớp file nào")
+            paths.extend(matches)
+        elif candidate.is_dir():
+            matches = sorted(candidate.glob("baseline_before*.json"))
+            if not matches:
+                raise ReuseBeforeError(
+                    f"thư mục {candidate} không có file baseline_before*.json"
+                )
+            paths.extend(matches)
+        else:
+            paths.append(candidate)
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in paths:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(path)
+    return unique
+
+
+def load_reuse_before(specs: list[str]) -> list[RealRun]:
+    """Đọc kết quả **before đã lưu** thay vì replay (TASK_P16l).
+
+    Kiểm rõ: file tồn tại, JSON object, có ``totals`` với đủ khoá R4, và
+    ``method.code_source == "head"`` (tránh lấy nhầm file của worktree).
+    """
+    paths = expand_reuse_before(specs)
+    runs: list[RealRun] = []
+    for index, path in enumerate(paths, 1):
+        if not path.is_file():
+            raise ReuseBeforeError(f"không thấy file before: {path}")
+        doc = _load_json(path)
+        if doc is None:
+            raise ReuseBeforeError(f"{path} không phải JSON object đọc được")
+        totals = doc.get("totals")
+        if not isinstance(totals, dict):
+            raise ReuseBeforeError(f"{path} thiếu object 'totals'")
+        missing = [key for key in REUSE_REQUIRED_TOTALS if key not in totals]
+        if missing:
+            raise ReuseBeforeError(f"{path} thiếu totals: {', '.join(missing)}")
+        method = doc.get("method")
+        if isinstance(method, dict) and method.get("code_source") not in (None, "head"):
+            raise ReuseBeforeError(
+                f"{path} là mã {method.get('code_source')!r}, không phải 'head' "
+                "(không dùng làm before)"
+            )
+        runs.append(
+            RealRun(
+                state="before",
+                index=index,
+                path=path,
+                doc=doc,
+                call={"reused": True, "returncode": None, "seconds": 0.0},
+            )
+        )
+    return runs
 
 
 # ---------------------------------------------------------------------------------------
@@ -890,7 +1248,7 @@ def run_real_baseline(
 def render_markdown(document: dict[str, Any]) -> str:
     """Bảng markdown dán thẳng vào REPORT."""
     lines = [
-        "# P16f — bảng nghiệm thu P16",
+        "# P16j — bảng nghiệm thu P16",
         "",
         f"- lệnh: `{document['command']}`",
         f"- chạy lúc: {document['generated_at']} · mất {document['seconds']:.0f} s",
@@ -932,10 +1290,46 @@ def render_markdown(document: dict[str, Any]) -> str:
     if document.get("real"):
         real = document["real"]
         lines += ["", "## Video thật (R4)", ""]
+        if real.get("repeat"):
+            lines.append(
+                f"- lặp: **{real['repeat']} lần mỗi trạng thái mã** "
+                "(before = HEAD, after = worktree)"
+            )
+            lines.append(
+                "- **before = mã HEAD**: chỉ là \"trước sửa\" nếu HEAD chưa chứa fix P16; "
+                "nếu HEAD đã có fix thì before ≈ after, khi đó phải đo lại bằng commit cũ."
+            )
         for key, path in (("before", BASELINE_BEFORE), ("after", BASELINE_AFTER)):
             exists = "có" if Path(path).is_file() else "KHÔNG có"
-            lines.append(f"- baseline {key}: `{path}` ({exists})")
-        if real.get("call"):
+            lines.append(f"- baseline P16b đã lưu {key}: `{path}` ({exists})")
+        for label, runs_key, agg_key in (
+            ("before", "before_runs", "before_agg"),
+            ("after", "after_runs", "after_agg"),
+        ):
+            runs = real.get(runs_key) or []
+            if not runs:
+                continue
+            lines += ["", f"**{label}** — ENTRY/EXIT từng lần:"]
+            for run in runs:
+                totals = run.get("totals") or {}
+                call = run.get("call") or {}
+                if call.get("reused"):
+                    origin = "đã lưu"
+                else:
+                    origin = f"rc={call.get('returncode')}, {call.get('seconds', 0):.0f} s"
+                lines.append(
+                    f"- lần {run['index']}: ENTRY {totals.get('entry')}, "
+                    f"EXIT {totals.get('exit')} ({origin}) → `{run['path']}`"
+                )
+            agg = real.get(agg_key) or {}
+            entry = agg.get("entry") or {}
+            exit_ = agg.get("exit") or {}
+            lines.append(
+                f"- **TB / min:** ENTRY {entry.get('mean')} / {entry.get('min')} · "
+                f"EXIT {exit_.get('mean')} / {exit_.get('min')} "
+                f"({agg.get('ok_runs')}/{agg.get('runs')} lần đọc được)"
+            )
+        if real.get("call"):  # đường cũ: một lần chạy after
             lines.append(
                 f"- lệnh after: rc={real['call']['returncode']} "
                 f"{real['call']['seconds']:.0f} s → `{real['call']['log']}`"
@@ -963,7 +1357,7 @@ def render_table(document: dict[str, Any]) -> str:
         f"{'kịch bản':18}{'chỉ số':38}{'trước':>10}{'sau':>10}"
         f"{'ngưỡng':>28}  kết quả"
     )
-    lines = ["", "P16f — bảng nghiệm thu", header, "-" * len(header)]
+    lines = ["", "P16j — bảng nghiệm thu", header, "-" * len(header)]
     current = None
     for row in document["rows"]:
         if row["scenario"] != current:
@@ -1027,6 +1421,27 @@ def parser() -> argparse.ArgumentParser:
         help="bỏ baseline video thật (chạy nhanh khi đang sửa)",
     )
     result.add_argument(
+        "--repeat-real",
+        type=int,
+        default=REAL_REPEAT_DEFAULT,
+        metavar="N",
+        help=(
+            "số lần chạy real_baseline cho MỖI trạng thái mã (before=HEAD, after=worktree); "
+            f"R4 chấm theo trung bình N lần (mặc định {REAL_REPEAT_DEFAULT})"
+        ),
+    )
+    result.add_argument(
+        "--reuse-before",
+        nargs="+",
+        metavar="PATH",
+        default=None,
+        help=(
+            "dùng kết quả before ĐÃ LƯU thay vì chạy lại: thư mục (mọi "
+            "baseline_before*.json), glob, hoặc danh sách file JSON. "
+            "Thiếu/sai file thì dừng với lỗi rõ."
+        ),
+    )
+    result.add_argument(
         "--out-dir",
         type=Path,
         default=OUT_DIR,
@@ -1055,6 +1470,8 @@ def build_command(args: argparse.Namespace) -> str:
     if args.skip_real:
         parts.append("--skip-real")
     parts += [
+        "--repeat-real",
+        str(args.repeat_real),
         "--out-dir",
         str(args.out_dir),
         "--runs-dir",
@@ -1062,6 +1479,9 @@ def build_command(args: argparse.Namespace) -> str:
         "--min-free-gb",
         f"{args.min_free_gb:g}",
     ]
+    if args.reuse_before:
+        parts.append("--reuse-before")
+        parts.extend(str(value) for value in args.reuse_before)
     return " ".join(parts)
 
 
@@ -1089,9 +1509,9 @@ def build_document(
         }
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "tool": "sim3d/tools/p16_accept.py",
-        "phase": "P16f",
+        "phase": "P16j",
         "generated_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
         "command": command,
         "seconds": seconds,
@@ -1114,7 +1534,8 @@ def build_document(
                 "new_gid_growth": REAL_NEW_GID_GROWTH,
                 "occupancy_drop": REAL_OCCUPANCY_DROP,
                 "merge_reid": "không tăng",
-                "entry_exit": "không xa hơn đếm tay",
+                "entry_exit": "trung bình N lần: after ≥ before",
+                "repeat_default": REAL_REPEAT_DEFAULT,
             },
         },
         "rows": [row.to_dict() for row in rows],
@@ -1137,6 +1558,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.skip_real and "real" in scenarios:
         scenarios = [name for name in scenarios if name != "real"]
+    if args.repeat_real < 1:
+        print("--repeat-real phải ≥ 1 (mỗi trạng thái mã chạy ít nhất 1 lần)", file=sys.stderr)
+        return 2
+    if args.reuse_before and "real" not in scenarios:
+        print(
+            "--reuse-before chỉ dùng khi có phần real (đừng --skip-real)",
+            file=sys.stderr,
+        )
+        return 2
 
     out_dir = args.out_dir.resolve()
     runs_dir = args.runs_dir.resolve()
@@ -1179,31 +1609,93 @@ def main(argv: list[str] | None = None) -> int:
     real: dict[str, Any] | None = None
     real_before_doc: dict[str, Any] | None = None
     real_after_doc: dict[str, Any] | None = None
+    real_before_runs: list[RealRun] | None = None
+    real_after_runs: list[RealRun] | None = None
     real_missing_note = ""
     if "real" in scenarios:
-        real_before_doc = _load_json(BASELINE_BEFORE)
-        if real_before_doc is None:
-            real_missing_note = f"không thấy {BASELINE_BEFORE} — chưa so được R4"
-            notes.append(real_missing_note)
-        print("\nChạy baseline video thật (after)…")
+        repeat = args.repeat_real
+        if args.reuse_before:
+            try:
+                real_before_runs = load_reuse_before(args.reuse_before)
+            except ReuseBeforeError as error:
+                print(f"\nDỪNG: {error}", file=sys.stderr)
+                return 2
+            print(
+                f"\nDùng {len(real_before_runs)} kết quả before ĐÃ LƯU "
+                "(không replay before):"
+            )
+            for run in real_before_runs:
+                totals = real_run_totals(run.doc)
+                print(
+                    f"  before lần {run.index}: {run.path.name} — "
+                    f"ENTRY {totals['entry']}, EXIT {totals['exit']}, "
+                    f"new GID {totals['new_gid']}, merge {totals['merge']}"
+                )
+            print(
+                f"\nChạy baseline video thật: after(worktree) × {repeat} "
+                f"(cổng {REAL_API_PORT}/{REAL_GATE_PORT})…"
+            )
+        else:
+            print(
+                f"\nChạy baseline video thật: before(HEAD) × {repeat} + "
+                f"after(worktree) × {repeat} (cổng {REAL_API_PORT}/{REAL_GATE_PORT})…"
+            )
         try:
-            call = run_real_baseline(out_dir, min_free_gb=args.min_free_gb)
+            if not args.reuse_before:
+                real_before_runs = measure_real_state(
+                    "before", repeat, out_dir, min_free_gb=args.min_free_gb
+                )
+            real_after_runs = measure_real_state(
+                "after", repeat, out_dir, min_free_gb=args.min_free_gb
+            )
         except InsufficientSpace as error:
             print(f"\nDỪNG: {error}", file=sys.stderr)
             return 3
-        real_after_doc = _load_json(out_dir / "baseline_after.json")
-        print(
-            f"  real_baseline: rc={call['returncode']} · {call['seconds']:.0f} s "
-            f"→ {out_dir / 'baseline_after.json'}"
+        for label, state_runs in (("before", real_before_runs), ("after", real_after_runs)):
+            for run in state_runs:
+                totals = real_run_totals(run.doc)
+                if (run.call or {}).get("reused"):
+                    print(
+                        f"  {label} lần {run.index}: ENTRY {totals['entry']}, "
+                        f"EXIT {totals['exit']} (đã lưu)"
+                    )
+                    continue
+                seconds = float((run.call or {}).get("seconds") or 0.0)
+                print(
+                    f"  {label} lần {run.index}: ENTRY {totals['entry']}, "
+                    f"EXIT {totals['exit']} (rc={(run.call or {}).get('returncode')}, "
+                    f"{seconds:.0f} s)"
+                )
+                if not run.ok:
+                    notes.append(
+                        f"real {label} lần {run.index}: không đọc được "
+                        f"{run.path.name} — xem log"
+                    )
+            agg = aggregate_real_runs(state_runs)
+            print(
+                f"  {label}: ENTRY TB {agg['entry']['mean']} "
+                f"(min {agg['entry']['min']}) · EXIT TB {agg['exit']['mean']} "
+                f"(min {agg['exit']['min']})"
+            )
+        if not any(run.ok for run in real_before_runs) or not any(
+            run.ok for run in real_after_runs
+        ):
+            real_missing_note = "thiếu kết quả real_baseline ở một trạng thái — chưa chấm R4"
+            notes.append(real_missing_note)
+        real_before_doc = next(
+            (run.doc for run in reversed(real_before_runs) if run.ok), None
         )
-        if real_after_doc is None:
-            notes.append("real_baseline không ghi được baseline_after.json — xem log")
+        real_after_doc = next(
+            (run.doc for run in reversed(real_after_runs) if run.ok), None
+        )
         real = {
-            "call": call,
+            "repeat": repeat,
+            "before_runs": [run.to_dict() for run in real_before_runs],
+            "after_runs": [run.to_dict() for run in real_after_runs],
+            "before_agg": aggregate_real_runs(real_before_runs),
+            "after_agg": aggregate_real_runs(real_after_runs),
             "before_doc": real_before_doc,
             "after_doc": real_after_doc,
-            "before_path": str(out_dir / "baseline_before.json"),
-            "after_path": str(out_dir / "baseline_after.json"),
         }
 
     rows = score_all(
@@ -1212,6 +1704,8 @@ def main(argv: list[str] | None = None) -> int:
         real_before=real_before_doc,
         real_after=real_after_doc,
         real_missing_note=real_missing_note,
+        real_before_runs=real_before_runs,
+        real_after_runs=real_after_runs,
     )
     document = build_document(
         rows,

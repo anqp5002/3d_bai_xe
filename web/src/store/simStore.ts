@@ -118,6 +118,8 @@ export interface SimStore extends SimStoreData {
    */
   readonly addCars: (request: AddCarsRequest) => AddCarsResult;
   readonly removeSelectedCar: () => void;
+  /** Cho nhiều xe đang đỗ rời đi cùng một frame (một lần ghi, all-or-nothing). */
+  readonly removeCars: (carIds: readonly string[]) => boolean;
   readonly setCarSpeed: (carId: string, speedKmh: number) => void;
   readonly loadTemplate: (templateId: string) => Promise<void>;
   readonly saveScenario: (name: string) => Promise<void>;
@@ -821,6 +823,57 @@ export const useSimStore = create<SimStore>()((set, get) => ({
     if (rejected !== null) {
       set({ ...before, error: rejected, notice: null });
     }
+  },
+
+  removeCars(carIds: readonly string[]): boolean {
+    const { scenario, state, eventLog } = get();
+    if (scenario === null || state === null) {
+      return false;
+    }
+    const ids = [...new Set(carIds)];
+    if (ids.length === 0) {
+      set({ error: 'Chưa chọn xe nào để cho rời đi.' });
+      return false;
+    }
+    const notParked = ids.filter(
+      (id) => state.cars.find((car) => car.id === id)?.state !== 'parked',
+    );
+    if (notParked.length > 0) {
+      set({ error: `Chỉ xe đang đỗ mới rời được: ${notParked.join(', ')} không ở trạng thái đỗ.` });
+      return false;
+    }
+    if (state.frame >= scenario.duration_frames) {
+      set({ error: 'Đã hết thời lượng kịch bản.' });
+      return false;
+    }
+    if (!canAddEventAt(eventLog, state.frame)) {
+      set({ error: 'D9: frame hiện tại đang trước sự kiện cuối — không thêm được.' });
+      return false;
+    }
+    const before = { state, history: get().history, scenario, eventLog };
+    let nextLog: readonly SimEvent[] = eventLog;
+    try {
+      for (const id of ids) {
+        nextLog = appendEventLog(nextLog, leaveEvent(state.frame, id));
+      }
+    } catch (error) {
+      set({ error: errorMessage(error) });
+      return false;
+    }
+    set({
+      eventLog: nextLog,
+      scenario: { ...scenario, events: nextLog },
+      selectedCarId: null,
+      notice: `${String(ids.length)} xe rời đi cùng lúc ở frame ${String(state.frame)}: ${ids.join(', ')}.`,
+      error: null,
+    });
+    get().stepFrames(1);
+    const rejected = rejectedWarning(get().state);
+    if (rejected !== null) {
+      set({ ...before, error: rejected, notice: null });
+      return false;
+    }
+    return true;
   },
 
   setCarSpeed(carId: string, speedKmh: number): void {

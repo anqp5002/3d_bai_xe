@@ -106,6 +106,33 @@ describe('simStore — sự kiện live', () => {
     expect(['leaving_slot', 'driving_to_exit']).toContain(updated?.state);
   });
 
+  it('removeCars: 3 xe đỗ sẵn rời đi cùng một frame', () => {
+    setup(4);
+    const ids = (useSimStore.getState().state?.cars ?? []).slice(0, 3).map((car) => car.id);
+    expect(ids).toHaveLength(3);
+    expect(useSimStore.getState().removeCars(ids)).toBe(true);
+    const after = useSimStore.getState();
+    expect(after.eventLog).toHaveLength(3);
+    expect(after.eventLog.every((event) => event.type === 'leave' && event.frame === 0)).toBe(true);
+    for (const id of ids) {
+      const car = after.state?.cars.find((item) => item.id === id);
+      expect(['leaving_slot', 'driving_to_exit']).toContain(car?.state);
+    }
+    const untouched = after.state?.cars[3];
+    expect(untouched?.state).toBe('parked');
+    expect(after.error).toBeNull();
+  });
+
+  it('removeCars từ chối cả lô nếu có xe không đang đỗ (all-or-nothing)', () => {
+    setup(2);
+    const [first] = useSimStore.getState().state?.cars ?? [];
+    expect(useSimStore.getState().removeCars([first.id, 'V999'])).toBe(false);
+    const after = useSimStore.getState();
+    expect(after.eventLog).toHaveLength(0);
+    expect(after.error).toContain('V999');
+    expect(after.state?.cars[0].state).toBe('parked');
+  });
+
   it('setCarSpeed áp set_speed cho xe đang đỗ', () => {
     setup(1);
     const parked = useSimStore.getState().state?.cars[0];
