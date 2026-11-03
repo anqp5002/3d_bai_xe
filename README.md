@@ -37,6 +37,7 @@ Nạp ở ô **Nạp mẫu**, rồi bấm **Xuất**.
 |---|---|---|
 | `A1_vao_deu_30` | 5 phút | Bãi trống, 30 xe vào đều mỗi 6 s |
 | `A2_vao_day_60` | 8 phút | Bãi trống, 60 xe vào mỗi 4 s |
+| `A3_lap_day_bai` | 13 phút | Bãi trống, 85 xe vào mỗi 3,5 s, lấp ~85 % bãi (xe chờ cổng tới ~2,5 phút) |
 | `A4_don_dot` | 8 phút | 4 đợt × 15 xe dồn cổng (2,5 s/xe), các đợt cách 75 s |
 
 Bảng từng xe (mã xe, loại, màu, ô, giờ xuất hiện / vào / đỗ xong / rời / ra, thời tiết) ở **`KICH_BAN_TAI.md`**.

@@ -748,6 +748,8 @@ interface LeaderInfo {
  * 115 m).
  */
 const GATE_QUEUE_HOLD_M = 12;
+/** Đầu hàng cổng đứng yên ≥ ngần này frame thì xe sau không còn chờ nó theo thứ tự cổng (P17g). */
+const GATE_HEAD_STALE_FRAMES = 75;
 /**
  * Xe **phía trước trên cùng lộ trình** (dùng cho bám xe D7 và kẹp khoảng hở).
  *
@@ -882,6 +884,8 @@ export function maneuverPolygon(
  * trên làn len vào đúng chỗ đuôi sẽ quét qua.
  */
 const MANEUVER_TAIL_M = 1;
+/** Đoạn đầu (m) của vùng `leave_out` bị bỏ qua khi kiểm xe đang đứng trong vùng (P17g). */
+const LEAVE_OCCUPANCY_SKIP_M = 1.2;
 
 /**
  * Vùng đặt chỗ **dùng chung** cho một xe đang thao tác (P5f, ANS_coders-2_1 mục 2).
@@ -959,9 +963,20 @@ function backOffTarget(
     if (!yieldsTo(car, other, { ...world, zones: conflictZones })) {
       continue;
     }
-    const depth = penetrationDepth(inflateRect(carRectNow, YIELD_CLEARANCE_M), carRect(other));
+    let depth = penetrationDepth(inflateRect(carRectNow, YIELD_CLEARANCE_M), carRect(other));
     if (depth <= COLLISION_EPS_M) {
-      continue;
+      // P17g: `other` là xe `leaving_slot` đang CHỜ vùng lùi ra (claim) mà thân mình đang nằm trong
+      // vùng đó: vùng không bao giờ trống nếu mình không lùi — đúng ca B1 V044↔V022.
+      const claims = zonesOfCar(other, world);
+      if (
+        other.state === 'leaving_slot' &&
+        !world.reservations.some((item) => item.car_id === other.id) &&
+        claims.some((zone) => overlapsPolygon(rectPolygon(carRectNow), zone))
+      ) {
+        depth = COLLISION_EPS_M * 2;
+      } else {
+        continue;
+      }
     }
     if (depth < worst) {
       worst = depth;
@@ -981,8 +996,11 @@ function backOffTarget(
     lot.gates[gateKey],
     gateTravelDirection(lot.gates[gateKey]),
   );
+  // P17g: sàn này chỉ có nghĩa với xe ĐÃ QUA vạch cổng (không được lùi ngược lại qua vạch). Xe còn
+  // TRƯỚC vạch (gateS > routeS) mà áp sàn `gateS + margin` thì targetS luôn ≥ routeS ⇒ mọi lần lùi
+  // nhường của xe sắp tới cổng ra đều "không lùi được" (backoff_failed hàng trăm lần ở B/C).
   const gateFloor =
-    gateS === null ? 0 : Math.max(0, gateS + GATE_BACKOFF_MARGIN_M);
+    gateS === null || routeS < gateS ? 0 : Math.max(0, gateS + GATE_BACKOFF_MARGIN_M);
   const targetS = Math.max(gateFloor, routeS - limit);
   if (targetS >= routeS - 1e-9) {
     // Không lùi được (đã sát mốc chặn) — caller sẽ báo `backoff_failed`.
@@ -1016,7 +1034,7 @@ function stuckTrackerFrom(
  *
  * Đây là dung sai **có chủ đích, có đếm, có cảnh báo** (`ghost_pass`), không phải lỗi lập trình.
  */
-export const GHOST_AFTER_FRAMES = 235;
+export const GHOST_AFTER_FRAMES = 150;
 
 /** Tốc độ xe lách, m/s — chậm để người xem thấy rõ và để xe khác kịp phản ứng. */
 export const GHOST_SPEED_MPS = 1.5;
@@ -1216,6 +1234,26 @@ export function advanceSimState(
     // lý. Vùng mới nới `ZONE_MARGIN_M` nên biên chạm tới ô kề; nếu tính cả xe đỗ thì **mọi** ô
     // hàng 1–2 sẽ bị từ chối cấp và kẹt hàng loạt.
     const requester = cars.find((candidate) => candidate.id === request.car_id);
+    // P17g: với `leave_out`, vùng dùng để kiểm "có ai đang đứng trong" bỏ qua đoạn đầu
+    // (LEAVE_OCCUPANCY_SKIP_M) — xe chạy ở làn kề mép ô (aisle phía trước đầu xe) chạm biên vùng
+    // CHỈ vì thân xe đỗ trong ô, trong khi xe lùi ra đi xa khỏi nó. Đo (B1): V045 ở làn nam chạm
+    // biên vùng của V044 (ô S067) làm V044 không bao giờ được cấp vùng; cả cụm kẹt tới lúc lách.
+    // Vùng ĐẶT CHỖ (người khác không được vào) vẫn giữ nguyên, đầy đủ.
+    const occupancyPolygon =
+      request.op === 'leave_out' &&
+      requester?.route !== undefined &&
+      requester.route.maneuver_end_s !== undefined
+        ? maneuverPolygon(
+            requester.route,
+            LEAVE_OCCUPANCY_SKIP_M,
+            Math.min(
+              requester.route.length_m,
+              requester.route.maneuver_end_s + MANEUVER_TAIL_M * requester.length,
+            ),
+            requester.width,
+            requester.length,
+          )
+        : request.polygon;
     const occupiedByMoving = cars.some(
       (other) =>
         other.id !== request.car_id &&
@@ -1225,7 +1263,7 @@ export function advanceSimState(
         // không phải xe đang di chuyển. Tính nó là "đang chạy" thì xe ra ô cạnh bên và xe vào ô
         // kề chặn nhau (K5: V006 ra S041 ↔ V007 vào S043, vùng của bên này chứa thân bên kia).
         !(other.state === 'leaving_slot' && (other.route_s ?? 0) < 0.05) &&
-        overlapsPolygon(rectPolygon(carRect(other)), request.polygon) &&
+        overlapsPolygon(rectPolygon(carRect(other)), occupancyPolygon) &&
         // Lead (sau ANS_11): xe đứng ĐẰNG SAU xe đang xin `park_in` (hàng đợi trên làn) không chặn
         // đặt chỗ — xe xin đi TIẾN vào ô, rời xa chúng; nếu chúng chặn thì đầu hàng không bao giờ
         // vào ô và cả hàng sau nó đứng chờ (đo ở 40 xe seed 123: V009 đứng cách V008 7,4 m nhưng
@@ -1710,7 +1748,6 @@ function zonesOfCar(car: CarState, world: PriorityWorld): readonly (readonly Vec
   // chờ được cấp đặt chỗ. Trước đây dòng xe vào liên tục khiến xe chờ ra bị bỏ đói (seed fuzz 35).
   if (
     car.state === 'leaving_slot' &&
-    (car.route_s ?? 0) < 0.05 &&
     (car.still_frames ?? 0) >= LEAVE_CLAIM_FRAMES
   ) {
     const claim = maneuverZoneOf(car);
@@ -1894,7 +1931,6 @@ function advanceCar(
   let state: CarStateName = car.state;
   let targetSpeed = desired;
   const hasReservation = reservations.some((item) => item.car_id === car.id);
-  if (car.id === 'V044' && nextFrame >= 4199 && nextFrame <= 4201) { (globalThis as any).__dbg.push(['DBG0', car.state, hasReservation, routeS, reservations.length]); }
 
   if (state === 'entering') {
     const direction = gateTravelDirection(lot.gates.in);
@@ -1962,6 +1998,25 @@ function advanceCar(
     // đứng chết ở mốc cuối. Đây là hệ quả tất yếu của "không xe nào kẹt mãi": xe đã đi hết lộ trình
     // thì việc còn lại chỉ là ra khỏi khung.
     if (routeS >= route.length_m - 1e-6) {
+      // P17g (lỗi A3 V061): tuyến đích là Ô thì xe phải ĐỖ tại tâm ô, không được `exited`.
+      if (route.target.kind === 'slot') {
+        const slot = findSlot(lot, route.target.slot);
+        return {
+          ...car,
+          pose: {
+            x: round6(slot.center[0]),
+            y: round6(slot.center[1]),
+            th: round6(slot.heading),
+          },
+          state: 'parked',
+          v: 0,
+          ghost_since_frame: car.ghost_since_frame ?? nextFrame,
+          ghost_from_route_s: undefined,
+          ...(car.park_s === undefined
+            ? {}
+            : { park_until_frame: nextFrame + Math.round(car.park_s / dtS) }),
+        };
+      }
       return {
         ...car,
         state: 'exited',
@@ -2054,10 +2109,18 @@ function advanceCar(
           .filter((other) => other.id !== car.id && other.distance_m > 0 && other.distance_m < own.distance_m)
           .map((other) => cars.find((candidate) => candidate.id === other.id))
           .filter((other): other is CarState => other !== undefined);
-        const headYieldsToMe =
+        // P17g: đầu hàng đã đứng yên lâu (nó đang chờ thứ gì đó mà MÌNH có thể là một phần của vòng
+        // chờ: B1 V045 chờ V022 theo thứ tự cổng, V022 nhường V044, V044 chờ V045 rời vùng) thì
+        // không giữ chỗ theo thứ tự cổng nữa — cho xe sau đi tiếp để vòng vỡ ra.
+        const headStale =
           decision.occupantId === null &&
           ahead.length > 0 &&
-          ahead.every((other) => yieldsTo(other, car, world));
+          ahead.every((other) => (other.still_frames ?? 0) >= GATE_HEAD_STALE_FRAMES);
+        const headYieldsToMe =
+          headStale ||
+          (decision.occupantId === null &&
+            ahead.length > 0 &&
+            ahead.every((other) => yieldsTo(other, car, world)));
         if (!headYieldsToMe) {
           targetSpeed = 0;
         }
@@ -2179,7 +2242,6 @@ function advanceCar(
 
   let escalatedUntil: number | undefined;
   const result = advanceAlongRoute(route, routeS, car.pose, car.v, targetSpeed, dtS);
-  if (car.id === 'V044' && nextFrame >= 4199 && nextFrame <= 4201) { (globalThis as any).__dbg.push(['DBG', JSON.stringify({ targetSpeed, hasReservation, maneuverInProgress, state, rs: result.route_s, routeS, resv: reservations.map((r) => r.car_id + ':' + r.slot) })]); }
 
   if (result.route_s > routeS) {
     const leader = leaderGap(route, result.route_s, car, cars, world);
@@ -2198,7 +2260,6 @@ function advanceCar(
     // P5f: **vùng đặt chỗ D8 là hàng rào**: không vào vùng người khác đang giữ. Đây là chỗ phân
     // xử cho vùng hẹp (thao tác trong ô, góc cua, nút giao — ANS_P10a mục 5), nên xe nhường
     // dừng **trước biên** vùng, không bao giờ tiến tới mức chạm thân.
-    if (car.id === 'V044' && nextFrame >= 4199 && nextFrame <= 4201) { (globalThis as any).__dbg.push(['DBG2 rb', reservationBlocks(car, proposed, current, world), 'clip', JSON.stringify(clipCheck(lot, car, state, proposed, cars, world, nextFrame))]); }
     if (!isVip && !maneuverInProgress && reservationBlocks(car, proposed, current, world)) {
       return { ...car, pose: car.pose, v: 0, route_s: routeS, state };
     }
