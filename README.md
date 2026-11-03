@@ -22,6 +22,30 @@ Mở **http://127.0.0.1:8010**.
 - Xuất: nút **Xuất** sinh `data/runs/<id>/`: `raw_full.mp4`, `raw_cam1/2.mp4` (800×1280), GT (`gt_*.csv`) và `techgar_config/` để chạy TechGAR.
 - Mỗi lần xuất tốn 0,6–1,4 GB ổ đĩa.
 
+## Cho nhiều xe ra cùng lúc
+
+- Tick ô vuông đầu dòng các xe **đang đỗ** trong danh sách xe. Xe đang chạy thì ô tick bị mờ.
+- **Cho N xe đã chọn ra cùng lúc**: các xe đã tick cùng rời ô ở frame hiện tại.
+- **Chọn tất cả xe đỗ** / **Bỏ chọn**.
+- Luật D9: không chèn sự kiện trước sự kiện cuối. Với mẫu có sẵn sự kiện ở các giây sau, tua qua sự kiện cuối rồi mới bấm.
+
+## Kịch bản tải lớn (bộ A — cao điểm vào)
+
+Nạp ở ô **Nạp mẫu**, rồi bấm **Xuất**.
+
+| Mẫu | Dài | Nội dung |
+|---|---|---|
+| `A1_vao_deu_30` | 5 phút | Bãi trống, 30 xe vào đều mỗi 6 s |
+| `A2_vao_day_60` | 8 phút | Bãi trống, 60 xe vào mỗi 4 s |
+| `A4_don_dot` | 8 phút | 4 đợt × 15 xe dồn cổng (2,5 s/xe), các đợt cách 75 s |
+
+Bảng từng xe (mã xe, loại, màu, ô, giờ xuất hiện / vào / đỗ xong / rời / ra, thời tiết) ở **`KICH_BAN_TAI.md`**.
+Các mốc lấy từ lần chạy engine thật. Mã xe trùng mã trong `gt_events.csv` khi xuất.
+
+Bộ B (ra vào liên tục) và bộ C (tải lớn + thời tiết xấu) đang được chỉnh, sẽ thêm sau.
+
+---
+
 Các mục bên dưới viết theo máy gốc (`D:\TechGar2\sim3d`). Đổi đường dẫn theo nơi bạn clone.
 Phần chạy TechGAR (mục C/D) cần repo TechGAR backend riêng.
 

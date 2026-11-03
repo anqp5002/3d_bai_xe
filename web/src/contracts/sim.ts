@@ -143,6 +143,15 @@ export interface CarState {
   readonly route_s?: number;
   /** Số frame liên tiếp xe đứng yên (bộ đếm cảnh báo kẹt, FE §4.4.5). */
   readonly still_frames?: number;
+  /**
+   * P17e — frame bắt đầu chế độ **lách** (ghost pass), `undefined` khi không lách.
+   *
+   * Xe đứng yên ≥ `GHOST_AFTER_FRAMES` (6 s) mà vẫn bị chặn thì được phép đi xuyên qua đúng những
+   * xe đang chặn nó, để bảo đảm không xe nào kẹt mãi. Xem `engine.ts` phần `ghostPass`.
+   */
+  readonly ghost_since_frame?: number;
+  /** P17e — `route_s` lúc bắt đầu lách, m. Dùng để biết đã đi thêm ≥ 1 thân xe chưa. */
+  readonly ghost_from_route_s?: number;
   /** Hết frame này thì thôi leo thang `park_clip` (ANS_13): giữ leo thang liên tục sau lần kích hoạt đầu. */
   readonly clip_escalated_until?: number;
   /** Thời gian đỗ theo yêu cầu `add_car.park_s`, giây (rỗng = đỗ tới khi có lệnh rời). */
@@ -179,6 +188,13 @@ export const WARNING_KINDS = [
   'park_clip',
   /** Leo thang `park_clip` (ANS_13): xe kẹt ≥ 4 s chỉ vì xe đỗ ô kề cùng hàng, trần tạm nâng tới 0,35 m. */
   'park_clip_escalated',
+  /**
+   * P17e — **xe lách** (ghost pass): xe đứng yên ≥ 6 s được phép đi xuyên qua đúng những xe đang
+   * chặn nó, để bảo đảm "trường hợp nào cũng không kẹt". Đây là dung sai **có chủ đích và có đếm**,
+   * không phải lỗi lập trình; mọi va chạm trong lúc lách chỉ giữa xe lách với xe nó lách qua đều
+   * phân loại là `ghost_pass`, không phải `collision`.
+   */
+  'ghost_pass',
 ] as const;
 export type WarningKind = (typeof WARNING_KINDS)[number];
 

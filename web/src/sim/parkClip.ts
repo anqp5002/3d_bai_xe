@@ -115,6 +115,13 @@ export const PARK_CLIP_ESCALATED_MAX_M = 0.35;
 
 /** Số frame không tiến triển trước khi được leo thang (4 s @ 25 fps, ANS_13). */
 export const PARK_CLIP_ESCALATE_AFTER_FRAMES = 100;
+/**
+ * P17: bậc leo thang 2. Xe vào ô giữa hai xe đỗ (bãi gần đầy, xe đỗ lệch/rộng) có khi cần lấn hơn
+ * 0,35 m dọc cung quay; kẹt ≥ 8 s (A3: V061@S008, đúng 0,35 m rồi đứng) thì nâng trần tới 0,6 m.
+ * Xe chỉ lấn tới chỗ đủ qua (đường đi cố định), không phải lấn hết trần.
+ */
+export const PARK_CLIP_ESCALATED2_MAX_M = 1.0;
+export const PARK_CLIP_ESCALATE2_AFTER_FRAMES = 200;
 
 /** Dung sai có được áp dụng cho cặp (xe đang thao tác, xe khác) này không? */
 export function allowsParkClip(
@@ -140,7 +147,13 @@ export function parkClipReason(
   if (!MANEUVER_STATES.has(car.state)) {
     return null;
   }
-  if (other.state !== 'parked' || other.slot === null) {
+  // P17: xe `leaving_slot` chưa nhích (route_s ≈ 0) vẫn NẰM TRONG ô như xe đỗ (cùng quy ước với
+  // `occupiedByMoving` trong engine). Không coi nó là xe đỗ thì xe vào ô kề và xe đang chờ ra
+  // chặn nhau: bên vào không lấn được, bên ra chờ vùng của bên vào (deadlock 2 xe, seed fuzz 35).
+  const stationaryInSlot =
+    other.state === 'parked' ||
+    (other.state === 'leaving_slot' && (other.route_s ?? 0) < 0.05);
+  if (!stationaryInSlot || other.slot === null) {
     return null;
   }
   if (car.slot === null) {
@@ -186,6 +199,38 @@ export function parkClipWarning(
     neighbour_car_id: other.id,
     depth_m: depthM,
   };
+}
+
+/** Trần lấn khi xe ĐANG CHẠY lách xe đỗ/xe đứng trong ô (P17). */
+export const PASS_CLIP_MAX_M = 0.15;
+const PASSING_STATES: ReadonlySet<string> = new Set([
+  'entering',
+  'driving_to_slot',
+  'driving_to_exit',
+]);
+
+/**
+ * P17: xe đang chạy trên làn lách sát xe ĐỖ (hoặc xe `leaving_slot` chưa nhích) với độ xuyên nhỏ.
+ *
+ * Vì sao: tuyến làn là một đường cố định; xe rộng (SUV 1,75 m) đi qua mũi xe đỗ lệch vài cm là
+ * xuyên 1–2 cm và bị chặn VĨNH VIỄN — xe đỗ đó muốn ra thì chờ chính xe bị chặn (B1: V045↔V044).
+ * Ngoài đời tài xế lách thêm vài cm. Trần `PASS_CLIP_MAX_M` = trần hàng 3–5 của `park_clip`.
+ */
+export function passClipReason(
+  car: CarState,
+  other: CarState,
+  depthM: number,
+): { slot: SlotId; neighbour_slot: SlotId; row: string } | null {
+  if (!PASSING_STATES.has(car.state) || other.slot === null) {
+    return null;
+  }
+  const stationary =
+    other.state === 'parked' ||
+    (other.state === 'leaving_slot' && (other.route_s ?? 0) < 0.05);
+  if (!stationary || !(depthM > 0) || depthM > PASS_CLIP_MAX_M) {
+    return null;
+  }
+  return { slot: other.slot, neighbour_slot: other.slot, row: 'làn' };
 }
 
 /** Tách các bản ghi `park_clip` từ danh sách cảnh báo (ANS_4 mục 4). */

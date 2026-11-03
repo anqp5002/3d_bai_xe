@@ -746,3 +746,50 @@ def test_main_reuse_before_thieu_file_tra_2_va_khong_replay(
 def test_main_reuse_before_voi_skip_real_tra_2() -> None:
     code = accept.main(["--skip-real", "--reuse-before", "x.json"])
     assert code == 2
+
+
+def test_main_reuse_before_chi_chay_after_va_ghi_dung_so(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Chạy hết ``main`` với 3 file before đã lưu: chỉ after được đo, bảng dùng số cũ."""
+    for index, exit_ in enumerate((4, 4, 5), 1):
+        _write_before(tmp_path / f"baseline_before_r{index}.json", controller_exit=exit_)
+
+    measured: list[str] = []
+
+    def fake_measure(state, repeat, out_dir, *, min_free_gb=0.0, timeout_s=0.0):
+        measured.append(state)
+        return _real_runs(
+            state, [_real_doc2(6, 5) for _ in range(repeat)]
+        )
+
+    monkeypatch.setattr(accept, "measure_real_state", fake_measure)
+    monkeypatch.setattr(accept, "ensure_free_space", lambda path, min_gb: 30.0)
+
+    code = accept.main(
+        [
+            "--only",
+            "real",
+            "--repeat-real",
+            "3",
+            "--reuse-before",
+            str(tmp_path / "baseline_before_r*.json"),
+            "--out-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert code == 0
+    assert measured == ["after"]  # before KHÔNG chạy lại
+
+    document = json.loads((tmp_path / "p16_accept.json").read_text(encoding="utf-8"))
+    before_runs = document["real"]["before_runs"]
+    assert [run["call"]["reused"] for run in before_runs] == [True, True, True]
+    assert document["real"]["before_agg"]["exit"]["values"] == [4.0, 4.0, 5.0]
+    assert document["real"]["before_agg"]["exit"]["mean"] == pytest.approx(13 / 3)
+    exit_row = next(
+        row for row in document["rows"] if row["metric"] == "EXIT trung bình (N lần)"
+    )
+    assert exit_row["passed"] is True
+    assert "4/4/5" in exit_row["note"]
+    assert "(đã lưu)" in (tmp_path / "p16_accept.md").read_text(encoding="utf-8")

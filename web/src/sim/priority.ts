@@ -32,6 +32,13 @@ export interface PriorityWorld {
    * không có thì xét mọi đặt chỗ của xe.
    */
   readonly zone?: readonly Vec2[];
+  /** P17: xe được ưu tiên tuyệt đối để phá khoá (xem `computeVips` trong engine). */
+  readonly vips?: ReadonlySet<string>;
+  /**
+   * P17e — xe đang **lách** (ghost pass). Xe khác vẫn nhường chúng như xe đang thao tác, để xe lách
+   * không bị chặn lại ngay khi vừa nhích.
+   */
+  readonly ghostPasses?: ReadonlySet<string>;
   /**
    * Tập vùng đang tranh (nhiều đa giác) — dùng khi cặp xe có thể tranh ở **nhiều** vùng cùng lúc.
    *
@@ -114,10 +121,21 @@ function arrivalFrame(car: CarState, world: PriorityWorld): number {
  *
  * Trả mảng so sánh được theo từng phần tử; `id` là phần tử cuối nên khoá **không bao giờ trùng**.
  */
-function priorityKey(car: CarState, world: PriorityWorld): readonly [number, number, number, number] {
+function priorityKey(
+  car: CarState,
+  world: PriorityWorld,
+): readonly [number, number, number, number, number] {
   return [
+    world.vips?.has(car.id) === true || world.ghostPasses?.has(car.id) === true ? 0 : 1,
     holdsZone(car, world) ? 0 : 1,
-    LEAVING_STATES.has(car.state) ? 0 : 1,
+    // P17: xe `leaving_slot` còn NẰM TRONG ô (chưa nhích) xếp SAU xe rời bãi đang chạy: nếu không,
+    // xe đang chạy ra cổng dừng nhường một xe chưa đi được, còn xe kia chờ vùng xe đang chạy
+    // chiếm ⇒ khoá vòng hai xe (B1: V045↔V044). Vẫn thắng xe vào.
+    LEAVING_STATES.has(car.state)
+      ? car.state === 'leaving_slot' && (car.route_s ?? 0) < 0.05
+        ? 0.5
+        : 0
+      : 1,
     arrivalFrame(car, world),
     carNumber(car.id),
   ];
@@ -141,7 +159,7 @@ export function yieldsTo(a: CarState, b: CarState, world: PriorityWorld): boolea
   // V002 phía sau nhưng id nhỏ hơn) mà xét theo id thì xe SAU thắng và cứ đâm vào đuôi xe TRƯỚC
   // đang quay đầu, cả hai khoá nhau ở mức chạm. Phản xứng theo cấu tạo: chỉ trả quyết định khi
   // đúng MỘT bên thấy bên kia ở phía trước.
-  for (let index = 0; index < 3; index += 1) {
+  for (let index = 0; index < 4; index += 1) {
     if (ka[index] !== kb[index]) {
       return ka[index] > kb[index];
     }
@@ -152,8 +170,8 @@ export function yieldsTo(a: CarState, b: CarState, world: PriorityWorld): boolea
     // `a` thấy `b` ở phía trước mình (và `b` KHÔNG thấy `a` ở phía trước) ⇒ `b` đi trước ⇒ `a` nhường.
     return aSeesBAhead;
   }
-  if (ka[3] !== kb[3]) {
-    return ka[3] > kb[3];
+  if (ka[4] !== kb[4]) {
+    return ka[4] > kb[4];
   }
   // Không tới được: `carNumber` là khoá cuối và id duy nhất. Giữ nhánh này để hàm luôn trả
   // `boolean` kể cả khi id không theo dạng V### (khi đó so chuỗi để vẫn tất định).

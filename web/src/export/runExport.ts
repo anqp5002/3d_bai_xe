@@ -272,6 +272,26 @@ export interface ExportLog {
    * có thì `REPORT` phải ghi rõ (ANS_13 mục 3), nên tách khỏi `park_clip` để không lẫn.
    */
   readonly park_clip_escalated: ExportParkClip;
+  /**
+   * P17e — các lần **xe lách** (ghost pass): xe đứng yên ≥ 6 s được phép đi xuyên qua đúng những
+   * xe đang chặn nó, để bảo đảm không xe nào kẹt mãi.
+   *
+   * Mỗi phần tử: `{ car_id, start_frame, end_frame, through, depth_max_m }`. Người đo dùng cột này
+   * để biết **đoạn frame nào** có hai xe chồng nhau (và chồng bao nhiêu), thay vì phải dò video.
+   * Rỗng ở mọi kịch bản không lách (K1–K8, A1/A2/A4).
+   */
+  readonly ghost_passes: readonly ExportGhostPass[];
+}
+
+/** Một lần lách đã gộp theo xe (P17e). */
+export interface ExportGhostPass {
+  readonly car_id: string;
+  readonly start_frame: number;
+  readonly end_frame: number;
+  /** Id các xe bị lách qua (đã gộp, sắp xếp). */
+  readonly through: readonly string[];
+  /** Độ chồng lấn lớn nhất trong lần lách này, m. */
+  readonly depth_max_m: number;
 }
 
 /** Kiểm `outputs` hợp lệ và không rỗng (R2: báo lỗi sớm). */
@@ -524,6 +544,68 @@ export async function runExport(options: ExportOptions): Promise<ExportResult> {
     };
 
     const finishedMs = clock.nowMs();
+    // P17e: gộp các cảnh báo `ghost_pass` **theo xe** thành khoảng frame để người đo biết đoạn nào
+    // hai xe chồng nhau. `ghost_pass` được phát mỗi frame khi còn chồng lấn, nên gộp theo xe +
+    // khoảng frame liên tiếp là đúng ý nghĩa ("một lần lách").
+    const ghostPasses: ExportGhostPass[] = [];
+    const ghostOpen = new Map<
+      string,
+      { start: number; end: number; through: Set<string>; depth: number }
+    >();
+    for (const state of history) {
+      const seenThisFrame = new Set<string>();
+      for (const warning of state.warnings) {
+        if (warning.kind !== 'ghost_pass' || typeof warning.car_id !== 'string') {
+          continue;
+        }
+        const carId = warning.car_id;
+        seenThisFrame.add(carId);
+        const match = /chồng ([\d.]+) m/.exec(warning.message);
+        const depth = match === null ? 0 : Number(match[1]);
+        const through = /lách qua ([^ ]+)/.exec(warning.message)?.[1] ?? '';
+        const open = ghostOpen.get(carId);
+        if (open === undefined) {
+          ghostOpen.set(carId, {
+            start: state.frame,
+            end: state.frame,
+            through: new Set(through === '' ? [] : through.split(',')),
+            depth: Number.isFinite(depth) ? depth : 0,
+          });
+          continue;
+        }
+        open.end = state.frame;
+        for (const id of through === '' ? [] : through.split(',')) {
+          open.through.add(id);
+        }
+        if (Number.isFinite(depth)) {
+          open.depth = Math.max(open.depth, depth);
+        }
+      }
+      // Xe không còn cảnh báo ở frame này ⇒ đóng lần lách của nó.
+      for (const [carId, open] of [...ghostOpen.entries()]) {
+        if (seenThisFrame.has(carId)) {
+          continue;
+        }
+        ghostPasses.push({
+          car_id: carId,
+          start_frame: open.start,
+          end_frame: open.end,
+          through: [...open.through].sort(),
+          depth_max_m: Number(open.depth.toFixed(3)),
+        });
+        ghostOpen.delete(carId);
+      }
+    }
+    for (const [carId, open] of ghostOpen.entries()) {
+      ghostPasses.push({
+        car_id: carId,
+        start_frame: open.start,
+        end_frame: open.end,
+        through: [...open.through].sort(),
+        depth_max_m: Number(open.depth.toFixed(3)),
+      });
+    }
+
     const exportLog: ExportLog = {
       run_id: runId,
       started_at: options.startedAt,
@@ -541,6 +623,7 @@ export async function runExport(options: ExportOptions): Promise<ExportResult> {
       warnings,
       park_clip: parkClip,
       park_clip_escalated: parkClipEscalated,
+      ghost_passes: ghostPasses,
     };
     await putFile(backend, runId, 'export_log.json', encode(`${JSON.stringify(exportLog, null, 1)}\n`));
 
