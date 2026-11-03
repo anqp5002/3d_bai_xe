@@ -1,0 +1,165 @@
+{
+  "schema": 1,
+  "name": "Đêm mưa",
+  "description": "E8, 8 chu trình",
+  "lot": "pucpr",
+  "seed": 9006,
+  "car_scale": 1.1,
+  "default_speed_kmh": 10,
+  "camera_mode": "2cam",
+  "initial": {
+    "n_parked": 0,
+    "placement": []
+  },
+  "env": {
+    "preset": "E8",
+    "keyframes": [
+      {
+        "t_s": 0,
+        "hour": 20,
+        "weather": "rain",
+        "intensity": 0.8,
+        "wet": 0.9,
+        "fog": 0.2
+      },
+      {
+        "t_s": 168,
+        "hour": 23,
+        "weather": "rain",
+        "intensity": 0.7,
+        "wet": 0.8,
+        "fog": 0.3
+      }
+    ]
+  },
+  "noise": {
+    "shake": {
+      "on": false,
+      "level": 0.5
+    },
+    "grain": {
+      "on": false,
+      "level": 0.5
+    },
+    "jpeg": {
+      "on": false,
+      "level": 0.5
+    },
+    "downscale": {
+      "on": false,
+      "level": 0.5
+    },
+    "fps_drop": {
+      "on": false,
+      "level": 0.5
+    },
+    "flare": {
+      "on": false,
+      "level": 0.5
+    },
+    "drops": {
+      "on": false,
+      "level": 0.5
+    },
+    "smudge": {
+      "on": false,
+      "level": 0.5
+    },
+    "white_balance": {
+      "on": false,
+      "level": 0.5
+    },
+    "seed": 9006
+  },
+  "events": [
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S048",
+        "speed_kmh": 10,
+        "model": "suv",
+        "color": "red",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 300,
+      "type": "add_car",
+      "params": {
+        "slot": "S050",
+        "speed_kmh": 10,
+        "model": "hatch",
+        "color": "silver",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 600,
+      "type": "add_car",
+      "params": {
+        "slot": "S059",
+        "speed_kmh": 10,
+        "model": "suv",
+        "color": "red",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 900,
+      "type": "add_car",
+      "params": {
+        "slot": "S061",
+        "speed_kmh": 10,
+        "model": "sedan",
+        "color": "green",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 1200,
+      "type": "add_car",
+      "params": {
+        "slot": "S074",
+        "speed_kmh": 10,
+        "model": "sedan",
+        "color": "gray",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 1500,
+      "type": "add_car",
+      "params": {
+        "slot": "S076",
+        "speed_kmh": 10,
+        "model": "hatch",
+        "color": "silver",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 1800,
+      "type": "add_car",
+      "params": {
+        "slot": "S078",
+        "speed_kmh": 10,
+        "model": "suv",
+        "color": "green",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 2100,
+      "type": "add_car",
+      "params": {
+        "slot": "S080",
+        "speed_kmh": 10,
+        "model": "hatch",
+        "color": "black",
+        "park_s": 10
+      }
+    }
+  ],
+  "duration_frames": 4200
+}

@@ -1,0 +1,247 @@
+{
+  "schema": 1,
+  "name": "Tĩnh kiểm thu",
+  "description": "30 xe, E1, không sự kiện, 20 s",
+  "lot": "pucpr",
+  "seed": 9008,
+  "car_scale": 1.1,
+  "default_speed_kmh": 10,
+  "camera_mode": "2cam",
+  "initial": {
+    "n_parked": 30,
+    "placement": [
+      {
+        "slot": "S003",
+        "car_id": "V001",
+        "model": "hatch",
+        "color": "blue"
+      },
+      {
+        "slot": "S004",
+        "car_id": "V002",
+        "model": "hatch",
+        "color": "silver"
+      },
+      {
+        "slot": "S007",
+        "car_id": "V003",
+        "model": "sedan",
+        "color": "green"
+      },
+      {
+        "slot": "S009",
+        "car_id": "V004",
+        "model": "hatch",
+        "color": "silver"
+      },
+      {
+        "slot": "S014",
+        "car_id": "V005",
+        "model": "hatch",
+        "color": "gray"
+      },
+      {
+        "slot": "S017",
+        "car_id": "V006",
+        "model": "suv",
+        "color": "gray"
+      },
+      {
+        "slot": "S019",
+        "car_id": "V007",
+        "model": "sedan",
+        "color": "white"
+      },
+      {
+        "slot": "S020",
+        "car_id": "V008",
+        "model": "sedan",
+        "color": "green"
+      },
+      {
+        "slot": "S021",
+        "car_id": "V009",
+        "model": "sedan",
+        "color": "silver"
+      },
+      {
+        "slot": "S024",
+        "car_id": "V010",
+        "model": "sedan",
+        "color": "green"
+      },
+      {
+        "slot": "S025",
+        "car_id": "V011",
+        "model": "suv",
+        "color": "green"
+      },
+      {
+        "slot": "S032",
+        "car_id": "V012",
+        "model": "suv",
+        "color": "blue"
+      },
+      {
+        "slot": "S039",
+        "car_id": "V013",
+        "model": "hatch",
+        "color": "gray"
+      },
+      {
+        "slot": "S040",
+        "car_id": "V014",
+        "model": "suv",
+        "color": "sand"
+      },
+      {
+        "slot": "S048",
+        "car_id": "V015",
+        "model": "sedan",
+        "color": "green"
+      },
+      {
+        "slot": "S050",
+        "car_id": "V016",
+        "model": "sedan",
+        "color": "silver"
+      },
+      {
+        "slot": "S053",
+        "car_id": "V017",
+        "model": "sedan",
+        "color": "red"
+      },
+      {
+        "slot": "S055",
+        "car_id": "V018",
+        "model": "suv",
+        "color": "sand"
+      },
+      {
+        "slot": "S056",
+        "car_id": "V019",
+        "model": "hatch",
+        "color": "white"
+      },
+      {
+        "slot": "S057",
+        "car_id": "V020",
+        "model": "sedan",
+        "color": "green"
+      },
+      {
+        "slot": "S058",
+        "car_id": "V021",
+        "model": "hatch",
+        "color": "sand"
+      },
+      {
+        "slot": "S060",
+        "car_id": "V022",
+        "model": "sedan",
+        "color": "gray"
+      },
+      {
+        "slot": "S067",
+        "car_id": "V023",
+        "model": "suv",
+        "color": "red"
+      },
+      {
+        "slot": "S073",
+        "car_id": "V024",
+        "model": "hatch",
+        "color": "gray"
+      },
+      {
+        "slot": "S081",
+        "car_id": "V025",
+        "model": "sedan",
+        "color": "silver"
+      },
+      {
+        "slot": "S086",
+        "car_id": "V026",
+        "model": "hatch",
+        "color": "black"
+      },
+      {
+        "slot": "S089",
+        "car_id": "V027",
+        "model": "sedan",
+        "color": "gray"
+      },
+      {
+        "slot": "S091",
+        "car_id": "V028",
+        "model": "hatch",
+        "color": "white"
+      },
+      {
+        "slot": "S097",
+        "car_id": "V029",
+        "model": "hatch",
+        "color": "silver"
+      },
+      {
+        "slot": "S100",
+        "car_id": "V030",
+        "model": "sedan",
+        "color": "sand"
+      }
+    ]
+  },
+  "env": {
+    "preset": "E1",
+    "keyframes": [
+      {
+        "t_s": 0,
+        "hour": 12,
+        "weather": "sun",
+        "intensity": 0.8
+      }
+    ]
+  },
+  "noise": {
+    "shake": {
+      "on": false,
+      "level": 0.5
+    },
+    "grain": {
+      "on": false,
+      "level": 0.5
+    },
+    "jpeg": {
+      "on": false,
+      "level": 0.5
+    },
+    "downscale": {
+      "on": false,
+      "level": 0.5
+    },
+    "fps_drop": {
+      "on": false,
+      "level": 0.5
+    },
+    "flare": {
+      "on": false,
+      "level": 0.5
+    },
+    "drops": {
+      "on": false,
+      "level": 0.5
+    },
+    "smudge": {
+      "on": false,
+      "level": 0.5
+    },
+    "white_balance": {
+      "on": false,
+      "level": 0.5
+    },
+    "seed": 9008
+  },
+  "events": [],
+  "duration_frames": 500
+}

@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "name": "Ra–vào chéo",
+  "description": "Xe đỗ sẵn rời đúng lúc xe mới vào lối",
+  "lot": "pucpr",
+  "seed": 9003,
+  "car_scale": 1.1,
+  "default_speed_kmh": 10,
+  "camera_mode": "2cam",
+  "initial": {
+    "n_parked": 1,
+    "placement": [
+      {
+        "slot": "S016",
+        "car_id": "V001",
+        "model": "sedan",
+        "color": "black"
+      }
+    ]
+  },
+  "env": {
+    "preset": "E1",
+    "keyframes": [
+      {
+        "t_s": 0,
+        "hour": 12,
+        "weather": "sun",
+        "intensity": 0.8
+      }
+    ]
+  },
+  "noise": {
+    "shake": {
+      "on": false,
+      "level": 0.5
+    },
+    "grain": {
+      "on": false,
+      "level": 0.5
+    },
+    "jpeg": {
+      "on": false,
+      "level": 0.5
+    },
+    "downscale": {
+      "on": false,
+      "level": 0.5
+    },
+    "fps_drop": {
+      "on": false,
+      "level": 0.5
+    },
+    "flare": {
+      "on": false,
+      "level": 0.5
+    },
+    "drops": {
+      "on": false,
+      "level": 0.5
+    },
+    "smudge": {
+      "on": false,
+      "level": 0.5
+    },
+    "white_balance": {
+      "on": false,
+      "level": 0.5
+    },
+    "seed": 9003
+  },
+  "events": [
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S096",
+        "speed_kmh": 10,
+        "model": "suv",
+        "color": "green"
+      }
+    },
+    {
+      "frame": 50,
+      "type": "leave",
+      "params": {
+        "car_id": "V001"
+      }
+    }
+  ],
+  "duration_frames": 3000
+}

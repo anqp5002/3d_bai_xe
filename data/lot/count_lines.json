@@ -1,0 +1,16 @@
+{
+ "note": "So do vach dem (P11 / ANS_14). Nguon: sim3d/tools/measure_count_lines.py tren 3 run K2/K4/K6 (19 mau). File nay la mot nguon su that cho ca TS (export/countLines.ts) va pytest (test_count_lines.py) — doi so thi doi ca hai noi dung mot cho, test se bat neu lech.",
+ "count_line_abs_x_m": 20.05,
+ "count_line_margin_m": 0.6,
+ "car_length_max_m": 5.17,
+ "measured": {
+  "px_per_m_at_v343": 8.56,
+  "entry_samples_x_m": [31.54, 30.84, 30.84, 25.82, 30.49, 31.89, 26.64, 25.82, 27.57],
+  "exit_samples_x_m": [-30.26, -29.67, -31.31, -27.69, -26.75, -26.17, -27.69, -25.93, -30.96, -34.93],
+  "entry_deepest_x_m": 25.82,
+  "exit_shallowest_x_m": -25.93,
+  "gate_in_x_m": 36.21,
+  "gate_out_x_m": -36.92,
+  "runs": ["20261101-115325_K2-P10e", "20261101-120057_K4-P10e", "20261101-120558_K6-P10e"]
+ }
+}

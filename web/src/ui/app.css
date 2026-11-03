@@ -1,0 +1,987 @@
+:root {
+  color-scheme: dark;
+  --bg: #0f1216;
+  --bg-2: #11161d;
+  --panel: #161b22;
+  --panel-2: #1b222b;
+  --border: #2a323d;
+  --text: #e6e9ee;
+  --muted: #98a2b3;
+  --accent: #4f9cf9;
+  --accent-2: #2f6fc4;
+  --warn: #f0b34a;
+  --danger: #f2777a;
+  --ok: #6fcf97;
+  --p8: #c58af9;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* ---------------------------------------------------------------- topbar */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-2);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+.subtitle {
+  margin: 2px 0 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* -------------------------------------------------------------- workspace */
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr) 300px;
+  gap: 10px;
+  padding: 10px;
+}
+
+.panel {
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.panel-section + .panel-section {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.panel h3 {
+  margin: 12px 0 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* --------------------------------------------------------------- viewport */
+.viewport-wrap {
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  padding: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.viewport {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.viewport.idle {
+  cursor: none;
+}
+
+.view-toolbar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.view-toolbar .warn-note {
+  margin: 0;
+  flex-basis: 100%;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented button {
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.segmented button:last-child {
+  border-right: 0;
+}
+
+.segmented button.active {
+  background: var(--accent-2);
+  color: #fff;
+}
+
+.canvas-holder {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.viewport canvas {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(72vh, calc(100vh - 280px));
+  background: #000;
+  border-radius: 6px;
+  outline: 1px solid var(--border);
+}
+
+/*
+ * P14b: lớp nhiễu camera phủ **khít** canvas WebGL (ảnh 1:1, không co giãn), chỉ để hiển thị.
+ * `pointer-events: none` để click chọn xe/ô vẫn rơi vào canvas WebGL bên dưới.
+ */
+.viewport canvas.viewport-noise {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  max-width: 100%;
+  max-height: min(72vh, calc(100vh - 280px));
+  pointer-events: none;
+  border-radius: 6px;
+  outline: 0;
+  background: transparent;
+}
+
+.viewport-hint,
+.viewport-error {
+  position: absolute;
+  inset: 12px auto auto 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(10, 14, 20, 0.86);
+  font-size: 0.78rem;
+  pointer-events: none;
+}
+
+.viewport-error {
+  color: var(--danger);
+  border: 1px solid rgba(242, 119, 122, 0.45);
+}
+
+.record-hint {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(10, 14, 20, 0.8);
+  color: var(--muted);
+  font-size: 0.78rem;
+  pointer-events: none;
+  animation: record-hint-fade 3s forwards;
+}
+
+@keyframes record-hint-fade {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------- form fields */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.field > span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.field small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.field input[type="number"],
+.field input[type="text"],
+.field select,
+.inline-field input,
+.inline-field select {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.field input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.field-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.field-row .field {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.field-row.compact {
+  gap: 6px;
+  align-items: flex-end;
+  margin-top: 6px;
+}
+
+/* ------------------------------------------------------- form "Thêm xe" (P14a) */
+.add-car-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.add-car-form .field {
+  margin-bottom: 0;
+}
+
+/* Danh sách ô để tick khi thêm nhiều xe: cuộn được, không phình panel. */
+.slot-multi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  max-height: 96px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.slot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.inline-field input,
+.inline-field select {
+  width: auto;
+  min-width: 4.5rem;
+}
+
+.hint {
+  margin: 4px 0 8px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.warn-note {
+  margin: 6px 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(240, 179, 74, 0.4);
+  background: rgba(240, 179, 74, 0.08);
+  color: var(--warn);
+  font-size: 0.74rem;
+}
+
+.kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 0.78rem;
+}
+
+.kv span {
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- buttons */
+.btn {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: #3c4856;
+  background: #202a35;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-danger {
+  background: #532a2c;
+  border-color: #7a3a3e;
+  color: #ffd9da;
+}
+
+.btn-small {
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  margin-left: 6px;
+}
+
+.btn.full {
+  width: 100%;
+}
+
+.button-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+/* ------------------------------------------------------------------ misc */
+.badge {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.badge.p8 {
+  color: var(--p8);
+  border-color: rgba(197, 138, 249, 0.45);
+}
+
+/* P14b lỗi 6: `.p8-box` đã xoá cùng khối giữ chỗ "MÔI TRƯỜNG (P8)" trong CameraPanel. */
+
+.color-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex: 0 0 auto;
+}
+
+/* ------------------------------------------------------------- car list */
+.car-list,
+.scenario-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.car-list {
+  max-height: 34vh;
+  overflow: auto;
+}
+
+.car-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 12px 3rem 3rem minmax(0, 1fr) 2.6rem 2.6rem 4.4rem;
+  gap: 5px;
+  align-items: center;
+  padding: 5px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 0.72rem;
+  text-align: left;
+}
+
+.car-row:hover {
+  border-color: var(--border);
+}
+
+.car-row.selected {
+  border-color: var(--accent);
+  background: rgba(79, 156, 249, 0.12);
+}
+
+.car-id {
+  font-variant-numeric: tabular-nums;
+}
+
+.car-model,
+.car-slot,
+.car-scale,
+.car-speed {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.car-scale,
+.car-speed {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.empty {
+  padding: 8px 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.scenario-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 0.76rem;
+}
+
+.scenario-row:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.scenario-row small {
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- bottom */
+.bottom {
+  flex: 0 0 auto;
+  max-height: 42vh;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  background: var(--bg-2);
+  padding: 10px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bottom-grid .panel-section {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+/* -------------------------------------------------------------- timeline */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.timeline-clock {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.timeline-track {
+  position: relative;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.timeline-progress {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  opacity: 0.75;
+}
+
+.timeline-event {
+  position: absolute;
+  top: 2px;
+  width: 2px;
+  height: 10px;
+  background: var(--warn);
+  border-radius: 1px;
+  transform: translateX(-1px);
+}
+
+.timeline-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+/* ---------------------------------------------------------------- export */
+.outputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 6px 0;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+}
+
+.check.disabled {
+  opacity: 0.45;
+}
+
+.export-progress {
+  margin-top: 8px;
+}
+
+.progress {
+  height: 10px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.progress > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+
+.verify {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 0.74rem;
+}
+
+.verify.ok {
+  border-color: rgba(111, 207, 151, 0.45);
+}
+
+.verify.bad {
+  border-color: rgba(242, 119, 122, 0.5);
+}
+
+.verify p {
+  margin: 0 0 6px;
+}
+
+.verify ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.verify li.ok {
+  color: var(--ok);
+}
+
+.verify li.bad {
+  color: var(--danger);
+}
+
+/* -------------------------------------------------------------- statusbar */
+.statusbar {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 16px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-2);
+  font-size: 0.74rem;
+}
+
+.status-left,
+.status-right {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.status-right {
+  justify-content: flex-end;
+  max-width: 70%;
+}
+
+.status-error {
+  white-space: pre-wrap;
+}
+
+.ok {
+  color: var(--ok);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.notice {
+  color: var(--accent);
+}
+
+/* --------------------------------------------------------------- record */
+.app.record {
+  min-height: 100vh;
+  background: #000;
+  padding: 0;
+  display: flex;
+  /* Giữa màn hình: nền đen kín, khung camera đúng pixel ở giữa (FE §2). */
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+
+.app.record .viewport-wrap {
+  display: none;
+}
+
+.app.record > .viewport {
+  width: auto;
+  padding: 0;
+  gap: 0;
+}
+
+.app.record .canvas-holder {
+  width: auto;
+}
+
+.app.record .viewport canvas {
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  outline: 0;
+}
+
+.app.record .viewport canvas.viewport-noise {
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+}
+
+.record-exit {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 10;
+  opacity: 0.2;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.record-exit:hover {
+  opacity: 1;
+}
+
+/*
+ * Frame trắng đánh dấu đồng bộ (C2). Đặt **đè lên** canvas đúng kích thước khung quay,
+ * nên nó là một phần của hình được quay — nhưng KHÔNG vào video xuất (`export/` không
+ * dùng component này) và không đổi GT.
+ */
+.record-leader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  color: #000;
+  font: 700 12rem/1 ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Công tắc bật/tắt 3 frame đồng bộ — nằm ngoài khung hình quay (góc dưới-phải màn hình). */
+.record-toggle {
+  position: fixed;
+  bottom: 10px;
+  right: 12px;
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.78rem;
+  opacity: 0.2;
+}
+
+.record-toggle:hover {
+  opacity: 1;
+}
+
+/* Nút đọc trạng thái cho e2e — không vẽ ra màn hình. */
+.record-state {
+  display: none;
+}
+
+/* --------------------------------------------------------------- narrow */
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .car-row {
+    grid-template-columns: 12px 2.6rem 2.4rem minmax(0, 1fr) 2.2rem 4rem;
+  }
+
+  .car-scale {
+    display: none;
+  }
+
+  .workspace > .panel:last-child {
+    grid-column: 1 / -1;
+    max-height: 32vh;
+  }
+
+  .bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-right {
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    max-height: 38vh;
+  }
+
+  .viewport canvas {
+    max-height: 52vh;
+  }
+
+  .car-row {
+    grid-template-columns: 12px 3rem 3rem 1fr 2.6rem 4.4rem;
+  }
+
+  .car-scale {
+    display: none;
+  }
+}
+
+/* --- Panel môi trường (P9c): thanh giờ + 9 nút nhiễu --- */
+.env-timeline {
+  margin-bottom: 0.6rem;
+}
+
+.env-timeline-bar {
+  position: relative;
+  height: 3.2rem;
+  border-radius: 0.4rem;
+  background: linear-gradient(90deg, #1b2333 0%, #2d3a52 45%, #3d4a63 70%, #1b2333 100%);
+  border: 1px solid #2c3444;
+  margin-bottom: 0.35rem;
+}
+
+.env-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  border: 1px solid #46506a;
+  background: #0f1521;
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  color: #e8eaed;
+}
+
+.env-marker.active {
+  border-color: #ffd166;
+  box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.35);
+}
+
+.env-timeline-ticks {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 0.9rem;
+  font-size: 0.6rem;
+  color: #8b95a7;
+}
+
+.env-timeline-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.env-editor {
+  border-top: 1px solid #2c3444;
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.noise-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.noise-row {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr 2.2rem;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+}
+
+.noise-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.noise-row small {
+  color: #8b95a7;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,693 @@
+{
+  "schema": 1,
+  "name": "Bãi đầy",
+  "description": "90 xe đỗ sẵn, 5 xe ra/vào",
+  "lot": "pucpr",
+  "seed": 9007,
+  "car_scale": 1.1,
+  "default_speed_kmh": 10,
+  "camera_mode": "2cam",
+  "initial": {
+    "n_parked": 90,
+    "placement": [
+      {
+        "slot": "S001",
+        "car_id": "V001",
+        "model": "hatch",
+        "color": "black"
+      },
+      {
+        "slot": "S003",
+        "car_id": "V002",
+        "model": "sedan",
+        "color": "black"
+      },
+      {
+        "slot": "S004",
+        "car_id": "V003",
+        "model": "suv",
+        "color": "black"
+      },
+      {
+        "slot": "S005",
+        "car_id": "V004",
+        "model": "sedan",
+        "color": "white"
+      },
+      {
+        "slot": "S006",
+        "car_id": "V005",
+        "model": "suv",
+        "color": "blue"
+      },
+      {
+        "slot": "S007",
+        "car_id": "V006",
+        "model": "sedan",
+        "color": "blue"
+      },
+      {
+        "slot": "S008",
+        "car_id": "V007",
+        "model": "hatch",
+        "color": "green"
+      },
+      {
+        "slot": "S009",
+        "car_id": "V008",
+        "model": "hatch",
+        "color": "black"
+      },
+      {
+        "slot": "S010",
+        "car_id": "V009",
+        "model": "sedan",
+        "color": "silver"
+      },
+      {
+        "slot": "S011",
+        "car_id": "V010",
+        "model": "hatch",
+        "color": "gray"
+      },
+      {
+        "slot": "S012",
+        "car_id": "V011",
+        "model": "suv",
+        "color": "gray"
+      },
+      {
+        "slot": "S013",
+        "car_id": "V012",
+        "model": "sedan",
+        "color": "white"
+      },
+      {
+        "slot": "S014",
+        "car_id": "V013",
+        "model": "sedan",
+        "color": "blue"
+      },
+      {
+        "slot": "S015",
+        "car_id": "V014",
+        "model": "hatch",
+        "color": "green"
+      },
+      {
+        "slot": "S016",
+        "car_id": "V015",
+        "model": "sedan",
+        "color": "black"
+      },
+      {
+        "slot": "S017",
+        "car_id": "V016",
+        "model": "hatch",
+        "color": "white"
+      },
+      {
+        "slot": "S018",
+        "car_id": "V017",
+        "model": "suv",
+        "color": "gray"
+      },
+      {
+        "slot": "S019",
+        "car_id": "V018",
+        "model": "suv",
+        "color": "blue"
+      },
+      {
+        "slot": "S020",
+        "car_id": "V019",
+        "model": "suv",
+        "color": "green"
+      },
+      {
+        "slot": "S021",
+        "car_id": "V020",
+        "model": "suv",
+        "color": "white"
+      },
+      {
+        "slot": "S022",
+        "car_id": "V021",
+        "model": "suv",
+        "color": "red"
+      },
+      {
+        "slot": "S023",
+        "car_id": "V022",
+        "model": "hatch",
+        "color": "gray"
+      },
+      {
+        "slot": "S024",
+        "car_id": "V023",
+        "model": "sedan",
+        "color": "gray"
+      },
+      {
+        "slot": "S025",
+        "car_id": "V024",
+        "model": "sedan",
+        "color": "blue"
+      },
+      {
+        "slot": "S026",
+        "car_id": "V025",
+        "model": "suv",
+        "color": "red"
+      },
+      {
+        "slot": "S027",
+        "car_id": "V026",
+        "model": "hatch",
+        "color": "blue"
+      },
+      {
+        "slot": "S028",
+        "car_id": "V027",
+        "model": "hatch",
+        "color": "white"
+      },
+      {
+        "slot": "S030",
+        "car_id": "V028",
+        "model": "sedan",
+        "color": "gray"
+      },
+      {
+        "slot": "S031",
+        "car_id": "V029",
+        "model": "suv",
+        "color": "silver"
+      },
+      {
+        "slot": "S032",
+        "car_id": "V030",
+        "model": "sedan",
+        "color": "gray"
+      },
+      {
+        "slot": "S033",
+        "car_id": "V031",
+        "model": "suv",
+        "color": "gray"
+      },
+      {
+        "slot": "S034",
+        "car_id": "V032",
+        "model": "suv",
+        "color": "green"
+      },
+      {
+        "slot": "S035",
+        "car_id": "V033",
+        "model": "sedan",
+        "color": "gray"
+      },
+      {
+        "slot": "S036",
+        "car_id": "V034",
+        "model": "hatch",
+        "color": "black"
+      },
+      {
+        "slot": "S037",
+        "car_id": "V035",
+        "model": "sedan",
+        "color": "red"
+      },
+      {
+        "slot": "S038",
+        "car_id": "V036",
+        "model": "hatch",
+        "color": "blue"
+      },
+      {
+        "slot": "S039",
+        "car_id": "V037",
+        "model": "suv",
+        "color": "green"
+      },
+      {
+        "slot": "S040",
+        "car_id": "V038",
+        "model": "suv",
+        "color": "green"
+      },
+      {
+        "slot": "S041",
+        "car_id": "V039",
+        "model": "sedan",
+        "color": "green"
+      },
+      {
+        "slot": "S042",
+        "car_id": "V040",
+        "model": "sedan",
+        "color": "red"
+      },
+      {
+        "slot": "S043",
+        "car_id": "V041",
+        "model": "suv",
+        "color": "silver"
+      },
+      {
+        "slot": "S044",
+        "car_id": "V042",
+        "model": "hatch",
+        "color": "silver"
+      },
+      {
+        "slot": "S045",
+        "car_id": "V043",
+        "model": "hatch",
+        "color": "silver"
+      },
+      {
+        "slot": "S046",
+        "car_id": "V044",
+        "model": "sedan",
+        "color": "silver"
+      },
+      {
+        "slot": "S047",
+        "car_id": "V045",
+        "model": "suv",
+        "color": "gray"
+      },
+      {
+        "slot": "S048",
+        "car_id": "V046",
+        "model": "suv",
+        "color": "green"
+      },
+      {
+        "slot": "S049",
+        "car_id": "V047",
+        "model": "sedan",
+        "color": "white"
+      },
+      {
+        "slot": "S050",
+        "car_id": "V048",
+        "model": "suv",
+        "color": "blue"
+      },
+      {
+        "slot": "S051",
+        "car_id": "V049",
+        "model": "sedan",
+        "color": "sand"
+      },
+      {
+        "slot": "S053",
+        "car_id": "V050",
+        "model": "hatch",
+        "color": "sand"
+      },
+      {
+        "slot": "S054",
+        "car_id": "V051",
+        "model": "sedan",
+        "color": "gray"
+      },
+      {
+        "slot": "S055",
+        "car_id": "V052",
+        "model": "suv",
+        "color": "red"
+      },
+      {
+        "slot": "S056",
+        "car_id": "V053",
+        "model": "sedan",
+        "color": "green"
+      },
+      {
+        "slot": "S057",
+        "car_id": "V054",
+        "model": "suv",
+        "color": "gray"
+      },
+      {
+        "slot": "S058",
+        "car_id": "V055",
+        "model": "suv",
+        "color": "red"
+      },
+      {
+        "slot": "S059",
+        "car_id": "V056",
+        "model": "hatch",
+        "color": "green"
+      },
+      {
+        "slot": "S060",
+        "car_id": "V057",
+        "model": "hatch",
+        "color": "red"
+      },
+      {
+        "slot": "S061",
+        "car_id": "V058",
+        "model": "hatch",
+        "color": "red"
+      },
+      {
+        "slot": "S062",
+        "car_id": "V059",
+        "model": "suv",
+        "color": "silver"
+      },
+      {
+        "slot": "S063",
+        "car_id": "V060",
+        "model": "suv",
+        "color": "sand"
+      },
+      {
+        "slot": "S064",
+        "car_id": "V061",
+        "model": "suv",
+        "color": "gray"
+      },
+      {
+        "slot": "S065",
+        "car_id": "V062",
+        "model": "hatch",
+        "color": "white"
+      },
+      {
+        "slot": "S066",
+        "car_id": "V063",
+        "model": "suv",
+        "color": "black"
+      },
+      {
+        "slot": "S067",
+        "car_id": "V064",
+        "model": "sedan",
+        "color": "sand"
+      },
+      {
+        "slot": "S068",
+        "car_id": "V065",
+        "model": "sedan",
+        "color": "sand"
+      },
+      {
+        "slot": "S069",
+        "car_id": "V066",
+        "model": "suv",
+        "color": "sand"
+      },
+      {
+        "slot": "S070",
+        "car_id": "V067",
+        "model": "suv",
+        "color": "silver"
+      },
+      {
+        "slot": "S071",
+        "car_id": "V068",
+        "model": "hatch",
+        "color": "black"
+      },
+      {
+        "slot": "S072",
+        "car_id": "V069",
+        "model": "sedan",
+        "color": "silver"
+      },
+      {
+        "slot": "S073",
+        "car_id": "V070",
+        "model": "hatch",
+        "color": "gray"
+      },
+      {
+        "slot": "S074",
+        "car_id": "V071",
+        "model": "sedan",
+        "color": "gray"
+      },
+      {
+        "slot": "S075",
+        "car_id": "V072",
+        "model": "sedan",
+        "color": "green"
+      },
+      {
+        "slot": "S077",
+        "car_id": "V073",
+        "model": "hatch",
+        "color": "black"
+      },
+      {
+        "slot": "S078",
+        "car_id": "V074",
+        "model": "sedan",
+        "color": "silver"
+      },
+      {
+        "slot": "S079",
+        "car_id": "V075",
+        "model": "suv",
+        "color": "red"
+      },
+      {
+        "slot": "S080",
+        "car_id": "V076",
+        "model": "hatch",
+        "color": "silver"
+      },
+      {
+        "slot": "S081",
+        "car_id": "V077",
+        "model": "sedan",
+        "color": "black"
+      },
+      {
+        "slot": "S082",
+        "car_id": "V078",
+        "model": "hatch",
+        "color": "gray"
+      },
+      {
+        "slot": "S083",
+        "car_id": "V079",
+        "model": "suv",
+        "color": "red"
+      },
+      {
+        "slot": "S084",
+        "car_id": "V080",
+        "model": "suv",
+        "color": "black"
+      },
+      {
+        "slot": "S085",
+        "car_id": "V081",
+        "model": "hatch",
+        "color": "blue"
+      },
+      {
+        "slot": "S086",
+        "car_id": "V082",
+        "model": "suv",
+        "color": "sand"
+      },
+      {
+        "slot": "S087",
+        "car_id": "V083",
+        "model": "suv",
+        "color": "sand"
+      },
+      {
+        "slot": "S088",
+        "car_id": "V084",
+        "model": "hatch",
+        "color": "white"
+      },
+      {
+        "slot": "S089",
+        "car_id": "V085",
+        "model": "hatch",
+        "color": "green"
+      },
+      {
+        "slot": "S090",
+        "car_id": "V086",
+        "model": "sedan",
+        "color": "sand"
+      },
+      {
+        "slot": "S091",
+        "car_id": "V087",
+        "model": "suv",
+        "color": "sand"
+      },
+      {
+        "slot": "S092",
+        "car_id": "V088",
+        "model": "suv",
+        "color": "blue"
+      },
+      {
+        "slot": "S093",
+        "car_id": "V089",
+        "model": "suv",
+        "color": "silver"
+      },
+      {
+        "slot": "S094",
+        "car_id": "V090",
+        "model": "sedan",
+        "color": "red"
+      }
+    ]
+  },
+  "env": {
+    "preset": "E1",
+    "keyframes": [
+      {
+        "t_s": 0,
+        "hour": 12,
+        "weather": "sun",
+        "intensity": 0.8
+      }
+    ]
+  },
+  "noise": {
+    "shake": {
+      "on": false,
+      "level": 0.5
+    },
+    "grain": {
+      "on": false,
+      "level": 0.5
+    },
+    "jpeg": {
+      "on": false,
+      "level": 0.5
+    },
+    "downscale": {
+      "on": false,
+      "level": 0.5
+    },
+    "fps_drop": {
+      "on": false,
+      "level": 0.5
+    },
+    "flare": {
+      "on": false,
+      "level": 0.5
+    },
+    "drops": {
+      "on": false,
+      "level": 0.5
+    },
+    "smudge": {
+      "on": false,
+      "level": 0.5
+    },
+    "white_balance": {
+      "on": false,
+      "level": 0.5
+    },
+    "seed": 9007
+  },
+  "events": [
+    {
+      "frame": 0,
+      "type": "leave",
+      "params": {
+        "car_id": "V001"
+      }
+    },
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S095",
+        "speed_kmh": 10,
+        "model": "sedan",
+        "color": "white"
+      }
+    },
+    {
+      "frame": 400,
+      "type": "leave",
+      "params": {
+        "car_id": "V002"
+      }
+    },
+    {
+      "frame": 400,
+      "type": "add_car",
+      "params": {
+        "slot": "S096",
+        "speed_kmh": 10,
+        "model": "sedan",
+        "color": "sand"
+      }
+    },
+    {
+      "frame": 800,
+      "type": "leave",
+      "params": {
+        "car_id": "V003"
+      }
+    },
+    {
+      "frame": 800,
+      "type": "add_car",
+      "params": {
+        "slot": "S097",
+        "speed_kmh": 10,
+        "model": "suv",
+        "color": "silver"
+      }
+    },
+    {
+      "frame": 1200,
+      "type": "leave",
+      "params": {
+        "car_id": "V004"
+      }
+    },
+    {
+      "frame": 1200,
+      "type": "add_car",
+      "params": {
+        "slot": "S099",
+        "speed_kmh": 10,
+        "model": "sedan",
+        "color": "red"
+      }
+    },
+    {
+      "frame": 1600,
+      "type": "leave",
+      "params": {
+        "car_id": "V005"
+      }
+    },
+    {
+      "frame": 1600,
+      "type": "add_car",
+      "params": {
+        "slot": "S100",
+        "speed_kmh": 10,
+        "model": "sedan",
+        "color": "gray"
+      }
+    }
+  ],
+  "duration_frames": 3000
+}

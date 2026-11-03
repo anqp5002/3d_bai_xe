@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "name": "Xe đơn",
+  "description": "1 xe vào, đỗ 15 s, ra, E1",
+  "lot": "pucpr",
+  "seed": 9001,
+  "car_scale": 1.1,
+  "default_speed_kmh": 10,
+  "camera_mode": "2cam",
+  "initial": {
+    "n_parked": 0,
+    "placement": []
+  },
+  "env": {
+    "preset": "E1",
+    "keyframes": [
+      {
+        "t_s": 0,
+        "hour": 12,
+        "weather": "sun",
+        "intensity": 0.8
+      }
+    ]
+  },
+  "noise": {
+    "shake": {
+      "on": false,
+      "level": 0.5
+    },
+    "grain": {
+      "on": false,
+      "level": 0.5
+    },
+    "jpeg": {
+      "on": false,
+      "level": 0.5
+    },
+    "downscale": {
+      "on": false,
+      "level": 0.5
+    },
+    "fps_drop": {
+      "on": false,
+      "level": 0.5
+    },
+    "flare": {
+      "on": false,
+      "level": 0.5
+    },
+    "drops": {
+      "on": false,
+      "level": 0.5
+    },
+    "smudge": {
+      "on": false,
+      "level": 0.5
+    },
+    "white_balance": {
+      "on": false,
+      "level": 0.5
+    },
+    "seed": 9001
+  },
+  "events": [
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S056",
+        "speed_kmh": 10,
+        "model": "hatch",
+        "color": "blue",
+        "park_s": 15
+      }
+    }
+  ],
+  "duration_frames": 3000
+}

@@ -1,0 +1,765 @@
+{
+ "note": "Phân loại ô đếm được cổng hay không, sinh từ lộ trình thật (ANS_17). Sinh bởi sim3d/web/src/export/countSlots.test.ts — đừng sửa tay.",
+ "count_line_abs_x_m": 20.05,
+ "valid": [
+  "S048",
+  "S049",
+  "S050",
+  "S051",
+  "S052",
+  "S053",
+  "S054",
+  "S055",
+  "S056",
+  "S057",
+  "S058",
+  "S059",
+  "S060",
+  "S061",
+  "S071",
+  "S072",
+  "S073",
+  "S074",
+  "S075",
+  "S076",
+  "S077",
+  "S078",
+  "S079",
+  "S080",
+  "S081",
+  "S082",
+  "S083"
+ ],
+ "flagged": [
+  {
+   "slot": "S001",
+   "row": "1",
+   "center_x": 8.02,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S002",
+   "row": "1",
+   "center_x": 10.24,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S003",
+   "row": "1",
+   "center_x": 16.88,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S004",
+   "row": "1",
+   "center_x": 19.1,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S005",
+   "row": "1",
+   "center_x": 21.31,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S006",
+   "row": "1",
+   "center_x": 23.53,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S007",
+   "row": "1",
+   "center_x": 25.74,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S008",
+   "row": "1",
+   "center_x": -22.98,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S009",
+   "row": "1",
+   "center_x": -20.76,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S010",
+   "row": "1",
+   "center_x": -18.55,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S011",
+   "row": "1",
+   "center_x": -16.33,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S012",
+   "row": "1",
+   "center_x": -14.12,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S013",
+   "row": "1",
+   "center_x": -9.69,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S014",
+   "row": "1",
+   "center_x": -7.48,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S015",
+   "row": "1",
+   "center_x": -5.26,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S016",
+   "row": "1",
+   "center_x": -3.05,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S017",
+   "row": "1",
+   "center_x": -0.83,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S018",
+   "row": "1",
+   "center_x": 1.38,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S019",
+   "row": "1",
+   "center_x": 3.6,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S020",
+   "row": "1",
+   "center_x": 5.81,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S021",
+   "row": "1",
+   "center_x": 12.45,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S022",
+   "row": "1",
+   "center_x": 14.67,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S023",
+   "row": "2",
+   "center_x": -21.91,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S024",
+   "row": "2",
+   "center_x": -19.5,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S025",
+   "row": "2",
+   "center_x": -7.44,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S026",
+   "row": "2",
+   "center_x": -5.03,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S027",
+   "row": "2",
+   "center_x": -2.61,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S028",
+   "row": "2",
+   "center_x": -0.2,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S029",
+   "row": "2",
+   "center_x": 2.21,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S030",
+   "row": "2",
+   "center_x": 4.62,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S031",
+   "row": "2",
+   "center_x": 7.04,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S032",
+   "row": "2",
+   "center_x": 9.45,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S033",
+   "row": "2",
+   "center_x": 11.86,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S034",
+   "row": "2",
+   "center_x": 14.27,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S035",
+   "row": "2",
+   "center_x": 16.69,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S036",
+   "row": "2",
+   "center_x": 19.1,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S037",
+   "row": "2",
+   "center_x": 21.51,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S038",
+   "row": "2",
+   "center_x": 23.92,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S039",
+   "row": "2",
+   "center_x": 26.34,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S040",
+   "row": "2",
+   "center_x": -24.32,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S041",
+   "row": "2",
+   "center_x": -17.09,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S042",
+   "row": "2",
+   "center_x": -14.68,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S043",
+   "row": "2",
+   "center_x": -12.26,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S044",
+   "row": "2",
+   "center_x": -9.85,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 1 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S045",
+   "row": "3",
+   "center_x": -25.46,
+   "flag": "before_count_line",
+   "reason": "lộ trình không cắt vạch (vào 1 lần, ra 0 lần)",
+   "entry_crossings": 1,
+   "exit_crossings": 0,
+   "passes_a3": false
+  },
+  {
+   "slot": "S046",
+   "row": "3",
+   "center_x": -23,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 0 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 2,
+   "passes_a3": false
+  },
+  {
+   "slot": "S047",
+   "row": "3",
+   "center_x": -20.53,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 0 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 2,
+   "passes_a3": false
+  },
+  {
+   "slot": "S062",
+   "row": "3",
+   "center_x": 16.5,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 0 lần, ra cắt vạch vào 2 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S063",
+   "row": "3",
+   "center_x": 18.97,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 0 lần, ra cắt vạch vào 2 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S064",
+   "row": "3",
+   "center_x": 21.44,
+   "flag": "before_count_line",
+   "reason": "lộ trình không cắt vạch (vào 0 lần, ra 1 lần)",
+   "entry_crossings": 0,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S065",
+   "row": "3",
+   "center_x": 23.9,
+   "flag": "before_count_line",
+   "reason": "lộ trình không cắt vạch (vào 0 lần, ra 1 lần)",
+   "entry_crossings": 0,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S066",
+   "row": "3",
+   "center_x": 26.37,
+   "flag": "before_count_line",
+   "reason": "lộ trình không cắt vạch (vào 0 lần, ra 1 lần)",
+   "entry_crossings": 0,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S067",
+   "row": "4",
+   "center_x": -27.9,
+   "flag": "before_count_line",
+   "reason": "lộ trình không cắt vạch (vào 1 lần, ra 0 lần)",
+   "entry_crossings": 1,
+   "exit_crossings": 0,
+   "passes_a3": false
+  },
+  {
+   "slot": "S068",
+   "row": "4",
+   "center_x": -25.29,
+   "flag": "before_count_line",
+   "reason": "lộ trình không cắt vạch (vào 1 lần, ra 0 lần)",
+   "entry_crossings": 1,
+   "exit_crossings": 0,
+   "passes_a3": false
+  },
+  {
+   "slot": "S069",
+   "row": "4",
+   "center_x": -22.67,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 1 lần, ra cắt vạch vào 0 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 2,
+   "passes_a3": false
+  },
+  {
+   "slot": "S070",
+   "row": "4",
+   "center_x": -20.06,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt vạch nhiều lần (vào 1, ra 2; chỉ 1/1 lần trên A2)",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S084",
+   "row": "4",
+   "center_x": 16.53,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 0 lần, ra cắt vạch vào 2 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S085",
+   "row": "4",
+   "center_x": 19.14,
+   "flag": "route_not_on_A2",
+   "reason": "lộ trình cắt CHÉO vạch (vào cắt vạch ra 0 lần, ra cắt vạch vào 2 lần) — xe vượt qua vạch rồi vòng lại",
+   "entry_crossings": 1,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S086",
+   "row": "4",
+   "center_x": 21.76,
+   "flag": "before_count_line",
+   "reason": "lộ trình không cắt vạch (vào 0 lần, ra 1 lần)",
+   "entry_crossings": 0,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S087",
+   "row": "4",
+   "center_x": 24.37,
+   "flag": "before_count_line",
+   "reason": "lộ trình không cắt vạch (vào 0 lần, ra 1 lần)",
+   "entry_crossings": 0,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S088",
+   "row": "4",
+   "center_x": 26.98,
+   "flag": "before_count_line",
+   "reason": "lộ trình không cắt vạch (vào 0 lần, ra 1 lần)",
+   "entry_crossings": 0,
+   "exit_crossings": 1,
+   "passes_a3": false
+  },
+  {
+   "slot": "S089",
+   "row": "5",
+   "center_x": -30.81,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S090",
+   "row": "5",
+   "center_x": -27.95,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S091",
+   "row": "5",
+   "center_x": -25.1,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S092",
+   "row": "5",
+   "center_x": -22.25,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S093",
+   "row": "5",
+   "center_x": -19.39,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S094",
+   "row": "5",
+   "center_x": -16.54,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S095",
+   "row": "5",
+   "center_x": -13.68,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S096",
+   "row": "5",
+   "center_x": -10.83,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S097",
+   "row": "5",
+   "center_x": -7.98,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S098",
+   "row": "5",
+   "center_x": -5.12,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S099",
+   "row": "5",
+   "center_x": -2.27,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  },
+  {
+   "slot": "S100",
+   "row": "5",
+   "center_x": 0.59,
+   "flag": "camera_blind_A3",
+   "reason": "lộ trình đi qua A3 — camera không phủ quanh x = ±20 nên không cấp/giữ được ID",
+   "entry_crossings": 0,
+   "exit_crossings": 0,
+   "passes_a3": true
+  }
+ ]
+}

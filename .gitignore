@@ -1,0 +1,25 @@
+# File .gitignore riêng của sim3d/ (R10) — không sửa .gitignore gốc của repo.
+
+# Node / web
+web/node_modules/
+web/dist/
+web/coverage/
+web/.vite/
+npm-debug.log*
+
+# Python / server
+server/.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Dữ liệu sinh ra lúc chạy (giữ lot/ và templates/ trong git)
+data/runs/
+data/scenarios/
+tools/out/
+
+# Rác của OS/editor
+.DS_Store
+Thumbs.db

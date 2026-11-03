@@ -1,0 +1,133 @@
+{
+  "schema": 1,
+  "name": "Hàng chờ cổng",
+  "description": "6 xe dồn cổng",
+  "lot": "pucpr",
+  "seed": 9004,
+  "car_scale": 1.1,
+  "default_speed_kmh": 10,
+  "camera_mode": "2cam",
+  "initial": {
+    "n_parked": 0,
+    "placement": []
+  },
+  "env": {
+    "preset": "E1",
+    "keyframes": [
+      {
+        "t_s": 0,
+        "hour": 12,
+        "weather": "sun",
+        "intensity": 0.8
+      }
+    ]
+  },
+  "noise": {
+    "shake": {
+      "on": false,
+      "level": 0.5
+    },
+    "grain": {
+      "on": false,
+      "level": 0.5
+    },
+    "jpeg": {
+      "on": false,
+      "level": 0.5
+    },
+    "downscale": {
+      "on": false,
+      "level": 0.5
+    },
+    "fps_drop": {
+      "on": false,
+      "level": 0.5
+    },
+    "flare": {
+      "on": false,
+      "level": 0.5
+    },
+    "drops": {
+      "on": false,
+      "level": 0.5
+    },
+    "smudge": {
+      "on": false,
+      "level": 0.5
+    },
+    "white_balance": {
+      "on": false,
+      "level": 0.5
+    },
+    "seed": 9004
+  },
+  "events": [
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S048",
+        "speed_kmh": 10,
+        "model": "sedan",
+        "color": "silver",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S053",
+        "speed_kmh": 10,
+        "model": "suv",
+        "color": "red",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S056",
+        "speed_kmh": 10,
+        "model": "hatch",
+        "color": "green",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S061",
+        "speed_kmh": 10,
+        "model": "sedan",
+        "color": "silver",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S073",
+        "speed_kmh": 10,
+        "model": "suv",
+        "color": "black",
+        "park_s": 10
+      }
+    },
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S081",
+        "speed_kmh": 10,
+        "model": "sedan",
+        "color": "black",
+        "park_s": 10
+      }
+    }
+  ],
+  "duration_frames": 4000
+}

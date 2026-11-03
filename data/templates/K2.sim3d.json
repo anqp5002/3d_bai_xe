@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "name": "Đồng thời",
+  "description": "3 xe vào cách 2 s, có cặp cùng màu, E3",
+  "lot": "pucpr",
+  "seed": 9002,
+  "car_scale": 1.1,
+  "default_speed_kmh": 10,
+  "camera_mode": "2cam",
+  "initial": {
+    "n_parked": 0,
+    "placement": []
+  },
+  "env": {
+    "preset": "E3",
+    "keyframes": [
+      {
+        "t_s": 0,
+        "hour": 14,
+        "weather": "cloud",
+        "intensity": 0.6
+      }
+    ]
+  },
+  "noise": {
+    "shake": {
+      "on": false,
+      "level": 0.5
+    },
+    "grain": {
+      "on": false,
+      "level": 0.5
+    },
+    "jpeg": {
+      "on": false,
+      "level": 0.5
+    },
+    "downscale": {
+      "on": false,
+      "level": 0.5
+    },
+    "fps_drop": {
+      "on": false,
+      "level": 0.5
+    },
+    "flare": {
+      "on": false,
+      "level": 0.5
+    },
+    "drops": {
+      "on": false,
+      "level": 0.5
+    },
+    "smudge": {
+      "on": false,
+      "level": 0.5
+    },
+    "white_balance": {
+      "on": false,
+      "level": 0.5
+    },
+    "seed": 9002
+  },
+  "events": [
+    {
+      "frame": 0,
+      "type": "add_car",
+      "params": {
+        "slot": "S048",
+        "speed_kmh": 10,
+        "model": "sedan",
+        "color": "gray",
+        "park_s": 15
+      }
+    },
+    {
+      "frame": 50,
+      "type": "add_car",
+      "params": {
+        "slot": "S061",
+        "speed_kmh": 10,
+        "model": "hatch",
+        "color": "gray",
+        "park_s": 15
+      }
+    },
+    {
+      "frame": 100,
+      "type": "add_car",
+      "params": {
+        "slot": "S077",
+        "speed_kmh": 10,
+        "model": "suv",
+        "color": "sand",
+        "park_s": 15
+      }
+    }
+  ],
+  "duration_frames": 3600
+}
