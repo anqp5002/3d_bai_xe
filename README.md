@@ -1,5 +1,33 @@
 # SIM3D — web dựng bãi PUCPR 3D sinh video + GT cho TechGAR
 
+## Chạy nhanh cho team quay video (clone repo này)
+
+Cần: **Node.js ≥ 20**, **Python 3.11**, Chrome/Edge bản mới (xuất video dùng WebCodecs).
+
+```powershell
+git clone https://github.com/anqp5002/3d_bai_xe.git
+cd 3d_bai_xe
+
+# lần đầu
+cd server; python -m venv .venv; .\.venv\Scripts\python.exe -m pip install -e ".[dev]"; cd ..
+cd web; npm ci; npm run build; cd ..
+
+# mỗi lần dùng
+cd server; .\.venv\Scripts\python.exe -m sim3d_server --root ../data
+```
+
+Mở **http://127.0.0.1:8010**.
+- Thêm xe: dùng form "Thêm xe" (ô đích / ngẫu nhiên, số xe, giây bắt đầu, giãn cách, tốc độ), hoặc click ô trên khung xem.
+- Thời tiết: panel Môi trường (preset hoặc mốc giờ), khung xem đổi ngay. Quay màn hình bằng Snip được.
+- Xuất: nút **Xuất** sinh `data/runs/<id>/`: `raw_full.mp4`, `raw_cam1/2.mp4` (800×1280), GT (`gt_*.csv`) và `techgar_config/` để chạy TechGAR.
+- Mỗi lần xuất tốn 0,6–1,4 GB ổ đĩa.
+
+Các mục bên dưới viết theo máy gốc (`D:\TechGar2\sim3d`). Đổi đường dẫn theo nơi bạn clone.
+Phần chạy TechGAR (mục C/D) cần repo TechGAR backend riêng.
+
+---
+
+
 Web nội bộ, tách hoàn toàn khỏi `backend/` và `frontend/` của TechGAR (ý tưởng §4).
 Dựng bãi **PUCPR** (bộ PKLot) thành cảnh 3D kiểu đồ chơi, camera khớp camera dataset,
 sinh **GT theo từng frame** và **bộ config TechGAR** để chạy replay.
