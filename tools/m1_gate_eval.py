@@ -508,6 +508,12 @@ def _wait_for_runtime(url: str, timeout_s: float) -> dict[str, Any]:
     )
 
 
+def _runtime_extra_args() -> list[str]:
+    """Cờ thêm cho runtime từ biến môi trường ``GATE_RUNTIME_EXTRA`` (P18: đo trước/sau bằng
+    ``--legacy-*``), ví dụ ``GATE_RUNTIME_EXTRA="--legacy-token-continuation-range"``."""
+    return os.environ.get("GATE_RUNTIME_EXTRA", "").split()
+
+
 def _runtime_command(run_dir: Path, *, api_port: int, work: Path) -> list[str]:
     """Lệnh replay giống REPORT_M1 nhưng thêm ``--live-mode`` và ghi vào ``m1_gate/``."""
     config = run_dir / "techgar_config"
@@ -541,6 +547,7 @@ def _runtime_command(run_dir: Path, *, api_port: int, work: Path) -> list[str]:
         "--api-port",
         str(api_port),
         "--no-display",
+        *_runtime_extra_args(),
     ]
 
 

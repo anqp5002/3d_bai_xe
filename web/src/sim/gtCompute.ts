@@ -147,79 +147,172 @@ export function collectCarIds(history: readonly SimState[]): readonly string[] {
   return order;
 }
 
-interface TimelineEntry {
-  readonly frame: number;
-  readonly car: CarState;
-}
-
-interface Timeline {
-  readonly id: string;
-  readonly entries: readonly TimelineEntry[];
-}
-
-function buildTimelines(history: readonly SimState[]): readonly Timeline[] {
-  const order: string[] = [];
-  const byId = new Map<string, TimelineEntry[]>();
-  for (const state of history) {
-    for (const car of state.cars) {
-      let entries = byId.get(car.id);
-      if (entries === undefined) {
-        entries = [];
-        byId.set(car.id, entries);
-        order.push(car.id);
-      }
-      entries.push({ frame: state.frame, car });
-    }
-  }
-  return order.map((id) => ({ id, entries: byId.get(id) ?? [] }));
-}
-
 function centerOf(car: CarState): Vec2 {
   return [car.pose.x, car.pose.y];
 }
 
-/** Frame đầu tiên đường đi cắt đoạn cổng, chỉ xét frame > `afterFrame`. */
-function firstGateCrossing(
-  entries: readonly TimelineEntry[],
-  gateA: Vec2,
-  gateB: Vec2,
-  afterFrame: number,
-): number | null {
-  for (let index = 1; index < entries.length; index += 1) {
-    const current = entries[index];
-    if (current.frame <= afterFrame) {
-      continue;
-    }
-    const previous = entries[index - 1];
-    if (
-      segmentsIntersect(
-        centerOf(previous.car),
-        centerOf(current.car),
-        gateA,
-        gateB,
-      )
-    ) {
-      return current.frame;
-    }
-  }
-  return null;
+/**
+ * Trạng thái tăng dần của MỘT xe để tính một dòng `gt_events.csv` (P17n: tính GT theo luồng).
+ *
+ * Bản cũ gom toàn bộ `entries` của xe rồi quét nhiều lượt; bản này cập nhật từng frame với bộ nhớ
+ * O(1) mỗi xe. Mỗi trường được tính **đúng định nghĩa cũ** (xem chú thích từng trường) — test
+ * `gtStream.test.ts` so khớp từng byte với bản quét toàn history.
+ */
+interface EventAcc {
+  readonly id: string;
+  readonly model: CarState['model'];
+  readonly color: CarState['color'];
+  readonly initialParked: boolean;
+  slot: SlotId | null;
+  /** Điểm tâm của entry trước (để xét cắt vạch giữa hai entry liên tiếp của xe). */
+  prev: Vec2 | null;
+  gateInFrame: number | null;
+  /** Mọi frame cắt vạch ra; `gateOutFrame` = frame đầu tiên `> departFrame ?? -1` (chọn lúc kết). */
+  gateOutCrossings: number[];
+  parkedFrame: number | null;
+  departFrame: number | null;
+  overlapEnterFrame: number | null;
+  /** Có entry nào (frame ≤ parked) mà `u < cam2_x[0]` — chỉ cập nhật khi chưa tìm thấy parked. */
+  earlyBeyondCam2: boolean;
+  maxSpeed: number;
+  desiredSpeed: number | null;
 }
 
-/** Frame đầu tiên tâm xe vào đa giác ô đích (C9), tính từ `fromFrame`. */
-function firstInsideSlot(
-  entries: readonly TimelineEntry[],
-  polygon: readonly Vec2[],
-  fromFrame: number,
-): number | null {
-  for (const entry of entries) {
-    if (entry.frame < fromFrame) {
-      continue;
+/**
+ * `gt_events.csv` tính theo luồng: gọi {@link GtEventsStream.push} đúng một lần cho mỗi frame, liên
+ * tiếp từ frame 0, rồi {@link GtEventsStream.finish}. `gtEvents(lot, history)` chỉ là bọc quanh lớp
+ * này (một cài đặt duy nhất).
+ */
+export class GtEventsStream {
+  private readonly cars = new Map<string, EventAcc>();
+  private readonly order: string[] = [];
+  private initialIds: ReadonlySet<string> | null = null;
+  private readonly polygons = new Map<SlotId, readonly Vec2[]>();
+
+  constructor(private readonly lot: LotMap) {}
+
+  push(state: SimState): void {
+    const lot = this.lot;
+    if (this.initialIds === null) {
+      this.initialIds = new Set(
+        state.cars.filter((car) => car.state === 'parked').map((car) => car.id),
+      );
     }
-    if (entry.car.state === 'parked' && pointInPolygon(centerOf(entry.car), polygon)) {
-      return entry.frame;
+    for (const car of state.cars) {
+      let acc = this.cars.get(car.id);
+      if (acc === undefined) {
+        acc = {
+          id: car.id,
+          model: car.model,
+          color: car.color,
+          initialParked: this.initialIds.has(car.id),
+          slot: null,
+          prev: null,
+          gateInFrame: null,
+          gateOutCrossings: [],
+          parkedFrame: null,
+          departFrame: null,
+          overlapEnterFrame: null,
+          earlyBeyondCam2: false,
+          maxSpeed: 0,
+          desiredSpeed: null,
+        };
+        this.cars.set(car.id, acc);
+        this.order.push(car.id);
+      }
+      const frame = state.frame;
+      const center = centerOf(car);
+      if (acc.slot === null && car.slot !== null) {
+        acc.slot = car.slot;
+      }
+      // Cắt vạch (giữa entry trước và entry này).
+      if (acc.prev !== null) {
+        if (
+          acc.gateInFrame === null &&
+          !acc.initialParked &&
+          segmentsIntersect(acc.prev, center, lot.gates.in.p1, lot.gates.in.p2)
+        ) {
+          acc.gateInFrame = frame;
+        }
+        if (segmentsIntersect(acc.prev, center, lot.gates.out.p1, lot.gates.out.p2)) {
+          acc.gateOutCrossings.push(frame);
+        }
+      }
+      acc.prev = center;
+
+      const needU =
+        (acc.parkedFrame === null && !acc.initialParked) ||
+        (acc.departFrame !== null && acc.overlapEnterFrame === null);
+      const u = needU ? projectPoint(lot.camera, car.pose.x, car.pose.y)[0] : 0;
+
+      // overlap: entry có frame > departFrame (departFrame đã biết từ frame TRƯỚC).
+      if (
+        acc.departFrame !== null &&
+        acc.overlapEnterFrame === null &&
+        frame > acc.departFrame &&
+        u < lot.camera.cam1_x[1]
+      ) {
+        acc.overlapEnterFrame = frame;
+      }
+      // depart: entry đầu tiên có frame > searchFrom và state ≠ parked
+      // (initialParked: searchFrom = −1; còn lại: frame của parked_frame, đã biết từ frame trước).
+      if (acc.departFrame === null) {
+        if (acc.initialParked) {
+          if (car.state !== 'parked') {
+            acc.departFrame = frame;
+          }
+        } else if (acc.parkedFrame !== null && frame > acc.parkedFrame && car.state !== 'parked') {
+          acc.departFrame = frame;
+        }
+      }
+      // arrival_crosses_cameras: entry có frame ≤ parked_frame với u < cam2_x[0].
+      if (!acc.initialParked && acc.parkedFrame === null && u < lot.camera.cam2_x[0]) {
+        acc.earlyBeyondCam2 = true;
+      }
+      // parked_frame: entry đầu tiên (parked + tâm trong đa giác ô `slot` — ô đầu tiên khác null).
+      if (!acc.initialParked && acc.parkedFrame === null && acc.slot !== null && car.state === 'parked') {
+        let polygon = this.polygons.get(acc.slot);
+        if (polygon === undefined) {
+          polygon = slotPolygon(lot, acc.slot);
+          this.polygons.set(acc.slot, polygon);
+        }
+        if (pointInPolygon(center, polygon)) {
+          acc.parkedFrame = frame;
+        }
+      }
+      acc.maxSpeed = Math.max(acc.maxSpeed, Math.abs(car.v));
+      if (car.desired_speed_mps !== undefined) {
+        acc.desiredSpeed = car.desired_speed_mps;
+      }
     }
   }
-  return null;
+
+  finish(gateNotes: ReadonlyMap<string, GateNote> = new Map()): readonly GtEventRow[] {
+    return this.order.map((id) => {
+      const acc = this.cars.get(id) as EventAcc;
+      const departFrame = acc.departFrame;
+      const afterFrame = departFrame ?? -1;
+      const gateOutFrame = acc.gateOutCrossings.find((frame) => frame > afterFrame) ?? null;
+      const arrivalCrosses = acc.parkedFrame !== null && acc.earlyBeyondCam2 ? 1 : 0;
+      const gateNote = acc.slot === null ? null : (gateNotes.get(acc.slot) ?? null);
+      const blankGate = gateNote !== null;
+      return {
+        car: acc.id,
+        slot: acc.slot,
+        gate_in_frame: blankGate ? null : acc.gateInFrame,
+        parked_frame: acc.parkedFrame,
+        depart_frame: departFrame,
+        cam2_to_cam1_overlap_enter: acc.overlapEnterFrame,
+        gate_out_frame: blankGate ? null : gateOutFrame,
+        arrival_crosses_cameras: arrivalCrosses === 1 ? 1 : 0,
+        initial_parked: acc.initialParked ? 1 : 0,
+        model: acc.model,
+        color: acc.color,
+        speed_kmh: round1((acc.desiredSpeed ?? acc.maxSpeed) * 3.6),
+        gate_note: gateNote,
+      };
+    });
+  }
 }
 
 /**
@@ -228,6 +321,8 @@ function firstInsideSlot(
  * `speed_kmh` lấy **tốc độ người dùng đặt** (`CarState.desired_speed_mps`), không
  * lấy tốc độ lớn nhất quan sát được; chỉ khi dữ liệu cũ không có trường này mới
  * quay về tốc độ lớn nhất (REPORT_P5a #2).
+ *
+ * P17n: cài đặt duy nhất là {@link GtEventsStream}; hàm này chỉ đẩy cả `history` qua nó.
  */
 export function gtEvents(
   lot: LotMap,
@@ -244,102 +339,11 @@ export function gtEvents(
   if (history.length === 0) {
     return [];
   }
-  const start = history[0];
-  const initialIds = new Set(
-    start.cars.filter((car) => car.state === 'parked').map((car) => car.id),
-  );
-  return buildTimelines(history).map((timeline) => {
-    const entries = timeline.entries;
-    const first = entries[0];
-    const initialParked = initialIds.has(timeline.id);
-    const slot = entries.find((entry) => entry.car.slot !== null)?.car.slot ?? null;
-
-    const gateInFrame = initialParked
-      ? null
-      : firstGateCrossing(entries, lot.gates.in.p1, lot.gates.in.p2, -1);
-
-    let parkedFrame: number | null = null;
-    if (!initialParked && slot !== null) {
-      parkedFrame = firstInsideSlot(entries, slotPolygon(lot, slot), 0);
-    }
-
-    let departFrame: number | null = null;
-    if (initialParked || parkedFrame !== null) {
-      const searchFrom = parkedFrame ?? -1;
-      for (const entry of entries) {
-        if (entry.frame > searchFrom && entry.car.state !== 'parked') {
-          departFrame = entry.frame;
-          break;
-        }
-      }
-    }
-
-    let overlapEnterFrame: number | null = null;
-    if (departFrame !== null) {
-      for (const entry of entries) {
-        if (entry.frame <= departFrame) {
-          continue;
-        }
-        const [u] = projectPoint(lot.camera, entry.car.pose.x, entry.car.pose.y);
-        if (u < lot.camera.cam1_x[1]) {
-          overlapEnterFrame = entry.frame;
-          break;
-        }
-      }
-    }
-
-    const gateOutFrame = firstGateCrossing(
-      entries,
-      lot.gates.out.p1,
-      lot.gates.out.p2,
-      departFrame ?? -1,
-    );
-
-    let arrivalCrosses = 0;
-    if (parkedFrame !== null) {
-      for (const entry of entries) {
-        if (entry.frame > parkedFrame) {
-          break;
-        }
-        const [u] = projectPoint(lot.camera, entry.car.pose.x, entry.car.pose.y);
-        if (u < lot.camera.cam2_x[0]) {
-          arrivalCrosses = 1;
-          break;
-        }
-      }
-    }
-
-    let maxSpeed = 0;
-    for (const entry of entries) {
-      maxSpeed = Math.max(maxSpeed, Math.abs(entry.car.v));
-    }
-    const desiredSpeed = entries.reduce<number | null>((found, entry) => {
-      const value = entry.car.desired_speed_mps;
-      return value === undefined ? found : value;
-    }, null);
-
-    // P11c mục 2: ô không đếm được cổng ⇒ GT để **rỗng** hai cột cổng và ghi lý do.
-    // Không "sửa" số: đây là khai báo rằng vị trí vạch/camera không cho phép đo, không phải xe
-    // không có cổng.
-    const gateNote = slot === null ? null : (gateNotes.get(slot) ?? null);
-    const blankGate = gateNote !== null;
-
-    return {
-      car: timeline.id,
-      slot,
-      gate_in_frame: blankGate ? null : gateInFrame,
-      parked_frame: parkedFrame,
-      depart_frame: departFrame,
-      cam2_to_cam1_overlap_enter: overlapEnterFrame,
-      gate_out_frame: blankGate ? null : gateOutFrame,
-      arrival_crosses_cameras: arrivalCrosses === 1 ? 1 : 0,
-      initial_parked: initialParked ? 1 : 0,
-      model: first.car.model,
-      color: first.car.color,
-      speed_kmh: round1((desiredSpeed ?? maxSpeed) * 3.6),
-      gate_note: gateNote,
-    };
-  });
+  const stream = new GtEventsStream(lot);
+  for (const state of history) {
+    stream.push(state);
+  }
+  return stream.finish(gateNotes);
 }
 
 function escapeCsv(value: string): string {
@@ -396,6 +400,83 @@ export function gtFramesCsv(
     lines.push(cells.join(','));
   }
   return `${lines.join('\n')}\n`;
+}
+
+/**
+ * `gt_frames.csv` tính theo luồng (P17n): mỗi frame chỉ giữ MỘT chuỗi thưa (ô + các xe đang có mặt),
+ * không giữ `GtFrameRow` đầy đủ lẫn `SimState`. Thứ tự cột xe = thứ tự xuất hiện lần đầu trong
+ * `state.cars` (giống {@link collectCarIds}); header chỉ biết ở cuối nên {@link GtFramesStream.finish}
+ * mới ghép CSV. Kết quả giống từng byte `gtFramesCsv(history.map(gtRow), collectCarIds(history))`.
+ */
+export class GtFramesStream {
+  private readonly index = new Map<string, number>();
+  private readonly ids: string[] = [];
+  private readonly rows: string[] = [];
+
+  constructor(
+    private readonly lot: LotMap,
+    private readonly mode: CameraMode,
+  ) {}
+
+  /** Mã xe theo thứ tự xuất hiện lần đầu (thứ tự cột xe). */
+  get carIds(): readonly string[] {
+    return this.ids;
+  }
+
+  push(state: SimState): void {
+    for (const car of state.cars) {
+      if (!this.index.has(car.id)) {
+        this.index.set(car.id, this.ids.length);
+        this.ids.push(car.id);
+      }
+    }
+    const row = gtRow(this.lot, state, this.mode);
+    const prefix = [String(row.frame)];
+    for (const slotId of SLOT_IDS) {
+      prefix.push(String(row.occupancy[slotId]));
+    }
+    const entries: string[] = [];
+    for (const carId of Object.keys(row.cars)) {
+      const projection = row.cars[carId];
+      entries.push(
+        `${String(this.index.get(carId))}/${projection.u === null ? '' : projection.u.toFixed(1)}/${
+          projection.v === null ? '' : projection.v.toFixed(1)
+        }/${projection.cams}`,
+      );
+    }
+    this.rows.push(`${prefix.join(',')}|${entries.join(';')}`);
+  }
+
+  /** Số frame đã nhận. */
+  get frameCount(): number {
+    return this.rows.length;
+  }
+
+  finish(): string {
+    const header = [
+      ...GT_FRAME_PREFIX_COLUMNS,
+      ...SLOT_IDS,
+      ...this.ids.flatMap((carId) => [`${carId}_u`, `${carId}_v`, `${carId}_cams`]),
+    ];
+    const lines = [header.join(',')];
+    const width = this.ids.length;
+    for (const packed of this.rows) {
+      const cut = packed.indexOf('|');
+      const cells: string[] = new Array<string>(width * 3).fill('');
+      const tail = packed.slice(cut + 1);
+      if (tail !== '') {
+        for (const entry of tail.split(';')) {
+          const [indexText, u, v, cams] = entry.split('/');
+          const base = Number(indexText) * 3;
+          cells[base] = u;
+          cells[base + 1] = v;
+          cells[base + 2] = cams;
+        }
+      }
+      lines.push(width === 0 ? packed.slice(0, cut) : `${packed.slice(0, cut)},${cells.join(',')}`);
+    }
+    return `${lines.join('\n')}\n`;
+  }
 }
 
 /** Nội dung `gt_events.csv` (UTF-8, LF), đúng thứ tự `GT_EVENT_COLUMNS`. */

@@ -60,6 +60,8 @@ export interface RoadNode {
 export interface RoadEdge {
   readonly id: string;
   readonly aisle_id: string;
+  /** Lối nối cung giao lộ: không được chọn làm làn vào/ra ô. */
+  readonly connector: boolean;
   readonly from: string;
   readonly to: string;
   readonly points: readonly [Vec2, Vec2];
@@ -111,6 +113,7 @@ export function buildRoadNetwork(lot: LotMap): RoadNetwork {
       edges.push({
         id: `${aisle.id}#${index - 1}`,
         aisle_id: aisle.id,
+        connector: aisle.connector === true,
         from: a.id,
         to: b.id,
         points: [a.point, b.point],
@@ -305,6 +308,61 @@ export function slotDepth(slot: Slot): number {
   return slotDepthM(slot);
 }
 
+
+/**
+ * P17l: lối nối cung ở giao lộ chèn thêm đỉnh vào làn thẳng (A2…), cắt làn thành nhiều cạnh
+ * thẳng hàng. Cung vào ô dài tới `R` m **ngược dòng** có thể bắt đầu trước đỉnh đầu của cạnh
+ * ngắn đó ⇒ lộ trình lùi lại. Nên coi cả **đoạn thẳng liên tục** của cùng một làn là một cạnh.
+ */
+function mergeCollinearRun(network: RoadNetwork, edge: RoadEdge): RoadEdge {
+  const match = /^(.*)#(\d+)$/.exec(edge.id);
+  if (match === null) {
+    return edge;
+  }
+  const prefix = match[1];
+  const byIndex = new Map<number, RoadEdge>();
+  for (const candidate of network.edges) {
+    const m = /^(.*)#(\d+)$/.exec(candidate.id);
+    if (m !== null && m[1] === prefix) {
+      byIndex.set(Number(m[2]), candidate);
+    }
+  }
+  const dir = (e: RoadEdge): Vec2 => {
+    const dx = e.points[1][0] - e.points[0][0];
+    const dy = e.points[1][1] - e.points[0][1];
+    const n = Math.hypot(dx, dy);
+    return [dx / n, dy / n];
+  };
+  const base = dir(edge);
+  const collinear = (e: RoadEdge): boolean => {
+    const d = dir(e);
+    return d[0] * base[0] + d[1] * base[1] > 1 - 1e-6;
+  };
+  let first = edge;
+  let last = edge;
+  const index = Number(match[2]);
+  for (let i = index - 1; ; i -= 1) {
+    const e = byIndex.get(i);
+    if (e === undefined || e.to !== first.from || !collinear(e)) break;
+    first = e;
+  }
+  for (let i = index + 1; ; i += 1) {
+    const e = byIndex.get(i);
+    if (e === undefined || e.from !== last.to || !collinear(e)) break;
+    last = e;
+  }
+  if (first === edge && last === edge) {
+    return edge;
+  }
+  return {
+    ...edge,
+    from: first.from,
+    to: last.to,
+    points: [first.points[0], last.points[1]],
+    length_m: first === last ? edge.length_m : distance(first.points[0], last.points[1]),
+  };
+}
+
 /** Cạnh có hướng gần tâm ô nhất, kèm hình chiếu lên cạnh. */
 function nearestEdgeToSlot(
   network: RoadNetwork,
@@ -318,7 +376,8 @@ function nearestEdgeToSlot(
   // 1,6 m), cung không bao giờ thẳng trục ô và xe kẹt `parking_in` ở mọi seed. Làn dùng để vào ô
   // phải (1) vuông góc với trục ô và (2) nằm ở phía MIỆNG ô.
   const axis: Vec2 = [Math.cos(slot.heading), Math.sin(slot.heading)];
-  const facing = network.edges.filter((edge) => {
+  const slotEdges = network.edges.filter((edge) => !edge.connector);
+  const facing = slotEdges.filter((edge) => {
     const dx = edge.points[1][0] - edge.points[0][0];
     const dy = edge.points[1][1] - edge.points[0][1];
     const length = Math.hypot(dx, dy);
@@ -331,7 +390,7 @@ function nearestEdgeToSlot(
     const attach = nearestPointOnSegment(edge.points[0], edge.points[1], slot.center);
     return (attach[0] - slot.center[0]) * axis[0] + (attach[1] - slot.center[1]) * axis[1] < 0;
   });
-  const candidates = facing.length > 0 ? facing : network.edges;
+  const candidates = facing.length > 0 ? facing : slotEdges;
   for (const edge of candidates) {
     const attach = nearestPointOnSegment(edge.points[0], edge.points[1], slot.center);
     const candidate = distance(attach, slot.center);
@@ -348,7 +407,7 @@ function nearestEdgeToSlot(
   if (bestEdge === null) {
     throw new Error(`slotAccess: bãi "${slot.id}" chưa có aisle nào`);
   }
-  return { edge: bestEdge, attach: bestAttach };
+  return { edge: mergeCollinearRun(network, bestEdge), attach: bestAttach };
 }
 
 /**
@@ -493,7 +552,7 @@ function cumulativeAt(points: readonly Vec2[], index: number): number {
 
 function pushUnique(points: Vec2[], point: Vec2): void {
   const last = points[points.length - 1];
-  if (last !== undefined && distance(last, point) <= 1e-9) {
+  if (last !== undefined && distance(last, point) <= 5e-3) {
     return;
   }
   points.push(clonePoint(point));
@@ -581,6 +640,21 @@ export function buildEntryRoute(
   }
   const arcStart = access.arc[0];
   if (arcStart !== undefined) {
+    // P17l: cung vào ô bắt đầu **ngược dòng** của đỉnh đầu cạnh (ô sát một cung giao lộ): bỏ
+    // các điểm đã vượt qua điểm bắt đầu cung để lộ trình không lùi lại rồi đi tiếp.
+    const edgeDir: Vec2 = [
+      access.edge.points[1][0] - access.edge.points[0][0],
+      access.edge.points[1][1] - access.edge.points[0][1],
+    ];
+    while (positions.length > 1) {
+      const last = positions[positions.length - 1];
+      const ahead =
+        (last[0] - arcStart.point[0]) * edgeDir[0] + (last[1] - arcStart.point[1]) * edgeDir[1];
+      if (ahead <= 1e-6) {
+        break;
+      }
+      positions.pop();
+    }
     pushUnique(positions, arcStart.point);
   }
   const arcStartIndex = positions.length - 1;

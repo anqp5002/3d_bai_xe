@@ -33,7 +33,15 @@ describe('lot_pucpr.json — lộ trình vào/ra bằng bộ định tuyến th�
   });
 
   it('L-GATE: không làn nào (ngoài làn cổng) vi phạm khoảng cách 2,0 m', () => {
-    expect(lGateViolations(lot)).toEqual([]);
+    // P17l phương án B (director): V_far_w cua R=2,9 m làm biên cổng ra còn 1,95 m (< 2,0).
+    // Ngoại lệ có chủ ý, tối thiểu 1,9 m; lái thật (loadSuites) phải không quét.
+    const violations = lGateViolations(lot).filter(
+      (v) =>
+        !(v.aisle_id === 'V_far_w' && v.gate === 'out' && v.clearance_m >= 1.9) &&
+        // Lối nối rẽ nam ngay sau cổng vào: cung bắt đầu trên chính làn cổng (xe đã qua vạch).
+        !(v.aisle_id === 'V_east_n' && v.gate === 'in'),
+    );
+    expect(violations).toEqual([]);
   });
 
   it('mọi làn có xe chạy đều rộng ≥ 2,8 m và một chiều', () => {

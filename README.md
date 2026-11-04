@@ -47,12 +47,6 @@ Bộ B (ra vào liên tục) và bộ C (tải lớn + thời tiết xấu) đan
 
 ---
 
-Các mục bên dưới viết theo máy gốc (`D:\TechGar2\sim3d`). Đổi đường dẫn theo nơi bạn clone.
-Phần chạy TechGAR (mục C/D) cần repo TechGAR backend riêng.
-
----
-
-
 Web nội bộ, tách hoàn toàn khỏi `backend/` và `frontend/` của TechGAR (ý tưởng §4).
 Dựng bãi **PUCPR** (bộ PKLot) thành cảnh 3D kiểu đồ chơi, camera khớp camera dataset,
 sinh **GT theo từng frame** và **bộ config TechGAR** để chạy replay.
@@ -76,7 +70,7 @@ Yêu cầu: **Python 3.11**, **Node.js ≥ 20** (đã kiểm 24.20.0), npm ≥ 1
 ```powershell
 cd D:\TechGar2\sim3d\server
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\\.venv\\Scripts\\python.exe -m pip install -e ".[dev]"
 
 cd ..\web
 npm ci
@@ -94,7 +88,7 @@ cd D:\TechGar2\sim3d\web
 npm run build
 
 cd D:\TechGar2\sim3d\server
-.\.venv\Scripts\python.exe -m sim3d_server --root ../data
+.\\.venv\Scripts\python.exe -m sim3d_server --root ../data
 ```
 
 Mở **<http://127.0.0.1:8010>** — giao diện + API cùng cổng, không cần Vite.
@@ -113,7 +107,7 @@ Hai terminal. Vite proxy `/api` sang `http://127.0.0.1:8010` (đích là IPv4 v�
 ```powershell
 # terminal 1
 cd D:\TechGar2\sim3d\server
-.\.venv\Scripts\python.exe -m sim3d_server --root ../data
+.\\.venv\Scripts\python.exe -m sim3d_server --root ../data
 
 # terminal 2
 cd D:\TechGar2\sim3d\web
@@ -150,7 +144,7 @@ Xuất bằng script (không cần mở trình duyệt):
 
 ```powershell
 cd D:\TechGar2\sim3d\server
-.\.venv\Scripts\python.exe -m sim3d_server --root ../data
+.\\.venv\Scripts\python.exe -m sim3d_server --root ../data
 
 # terminal khác
 cd D:\TechGar2\sim3d\web
@@ -228,8 +222,8 @@ Xuất ra rồi chạy lại từ log có sẵn (không replay lại): thêm `--
 Đổi cổng khi coders-2 đang chạy song song: `--api-port 8021 --gate-port 8020`.
 
 > **Chuyện bình thường khi replay hết frame:** `runtime_server` đóng cổng 8001 ngay khi replay
-> xong, nên lần poll kế tiếp của controller có thể in `ConnectionResetError: [WinError 10054]`
-> rồi dừng. Đó là dọn dẹp sau khi đã xong, không phải lỗi đếm — các dòng `[ENTRY]`/`[EXIT]` in
+> xong, nên lần poll kế tiếp của controller có thể in `ConnectionResetError: [WinError 10054]` rồi
+> dừng. Đó là dọn dẹp sau khi đã xong, không phải lỗi đếm — các dòng `[ENTRY]`/`[EXIT]` in
 > trước đó vẫn đúng. `m1_gate_eval.py` tự phân loại trường hợp này (`controller_log.kind =
 > "teardown"`) và ghi chú vào `gate_result.json`.
 
@@ -238,12 +232,19 @@ Xuất ra rồi chạy lại từ log có sẵn (không replay lại): thêm `--
 Mặc định luôn là **hành vi mới** (đã sửa). Cờ `--legacy-…` chỉ để đo A/B hoặc lùi nhanh nếu
 video thật thoái lui — **không** dùng trong run nghiệm thu.
 
-| Cờ (truyền cho `runtime_server.py`/`two_camera.py`) | Tắt cái gì | Sửa nào | Hậu quả nếu bật |
-|---|---|---|---|
-| `--legacy-parking-filter` | bộ lọc biên + làm mượt frame kiểu cũ | có từ trước P16 | baseline cũ của P10 |
-| `--legacy-departure-token-distance` | giới hạn khoảng cách `slot_diagonal × recovery_max_expand_ratio` của token khởi hành | #3 (`slot_vehicle_binder.py`) | track đã rời ô quá xa vẫn giữ `protected_local_keys` ⇒ **mất GID** (L3) |
-| `--legacy-dormant-merge-overlap` | chặn merge khi hai identity **cùng được đo** trong cùng frame ở hai vị trí cách nhau **> bề rộng ô** | #5 (`cross_camera_manager.py`) | gộp nhầm 2 xe ⇒ một GID dùng cho nhiều xe (L2) |
-| `--legacy-token-key-reuse` | thu hồi key của token **hết hạn** khỏi `_abandoned_candidate_keys` | #4 (`slot_vehicle_binder.py`, hiện ở worktree `D:/TechGar2_p16d`) | key bị token ô kế nhận lại, thời gian giữ cộng dồn ⇒ track xe đang chạy bị treo |
+| Cờ | Truyền cho | Tắt cái gì | Sửa nào | Hậu quả nếu bật |
+|---|---|---|---|---|
+| `--legacy-parking-filter` | runtime | bộ lọc biên + làm mượt frame mới | có từ trước P16 | baseline cũ của P10 |
+| `--legacy-departure-token-distance` | runtime | giới hạn khoảng cách của token khởi hành (`slot_diagonal × recovery_max_expand_ratio`) | #3 `slot_vehicle_binder.py` | track đã rời ô quá xa vẫn giữ `protected_local_keys` ⇒ **mất GID** |
+| `--legacy-token-key-reuse` | runtime | thu hồi key của token **hết hạn** | #4 `slot_vehicle_binder.py` | key bị token ô kế nhận lại, thời gian giữ cộng dồn ⇒ xe đang chạy bị treo |
+| `--legacy-dormant-merge-overlap` | runtime | chặn gộp khi hai identity **cùng được đo** trong một frame cách nhau **> bề rộng ô** | #5 `cross_camera_manager.py` | gộp nhầm 2 xe ⇒ **một GID cho nhiều xe** |
+| `--legacy-dormant-reid` | runtime | kiểm "bất khả thi vật lý" khi gán lại GID ngủ + giữ chỗ ô theo thị giác | #8 `cross_camera_manager.py` | GID cũ nhảy sang xe khác cách xa |
+| `--legacy-stale-last-seen` | **controller** (`gate_session_controller.py`) | nhận vị trí mới của xe đỗ lâu dù `last_seen_time` đứng yên | #7 | mất `[EXIT]` của xe đỗ lâu rồi ra |
+| `--legacy-token-continuation-range` | runtime | giới hạn nối mảnh của token khi chủ token **còn đỗ** (0,35 đường chéo ô thay vì 2,25) | P18 L-A `slot_vehicle_binder.py` | mảnh của **xe khác** đi ngang bị nối nhầm ⇒ xe vào không có GID, mất `[ENTRY]` |
+| `--legacy-young-source-merge-window` | runtime | cho GID nguồn trẻ (≤ 60 frame, chưa đỗ, chưa từng đo xa GID cũ) gộp vào GID cũ khi handoff | P18 L-B `cross_camera_manager.py` | xe ra mang GID mới ≠ GID có phiên ⇒ mất `[EXIT]` |
+
+Đo A/B cổng: `GATE_RUNTIME_EXTRA="--legacy-…" python sim3d/tools/m1_gate_eval.py <RUN>` (biến môi
+trường nối thêm cờ vào lệnh runtime). Không đặt biến = hành vi mới.
 
 Đo "trước sửa" khi worktree đã có fix: `real_baseline.py --runtime-arg --legacy-…`
 (hoặc `--legacy-departure-token-distance` có sẵn ở `real_baseline.py`).
@@ -256,30 +257,30 @@ video thật thoái lui — **không** dùng trong run nghiệm thu.
 cd D:\TechGar2
 
 # occupancy theo frame + độ trễ đổi trạng thái (coders-2)
-.\sim3d\server\.venv\Scripts\python.exe sim3d\tools\m1_eval.py "$RUN"
-.\sim3d\server\.venv\Scripts\python.exe sim3d\tools\m1_eval.py "$RUN" --skip-run
+.\\sim3d\\server\\.venv\\Scripts\\python.exe sim3d\\tools\\m1_eval.py "$RUN"
+.\\sim3d\\server\\.venv\\Scripts\\python.exe sim3d\\tools\\m1_eval.py "$RUN" --skip-run
 
 # đếm cổng (coders-1)
-.\sim3d\server\.venv\Scripts\python.exe sim3d\tools\m1_gate_eval.py "$RUN"
+.\\sim3d\\server\\.venv\\Scripts\\python.exe sim3d\\tools\\m1_gate_eval.py "$RUN"
 
 # track: recall xe-frame đang chạy + GID/đứt track theo xe (coders-2)
-.\sim3d\server\.venv\Scripts\python.exe sim3d\tools\m1_track_eval.py "$RUN"
-.\sim3d\server\.venv\Scripts\python.exe sim3d\tools\m1_track_eval.py "$RUN" --json out\track.json
+.\\sim3d\\server\\.venv\\Scripts\\python.exe sim3d\\tools\\m1_track_eval.py "$RUN"
+.\\sim3d\\server\\.venv\\Scripts\\python.exe sim3d\\tools\\m1_track_eval.py "$RUN" --json out\\track.json
 
 # nghiệm thu P16 bằng MỘT lệnh: 4 run sim + video thật, chấm ĐẠT/KHÔNG ĐẠT (P16f)
-.\sim3d\server\.venv\Scripts\python.exe sim3d\tools\p16_accept.py
-.\sim3d\server\.venv\Scripts\python.exe sim3d\tools\p16_accept.py --only k2,k4 --skip-real
+.\\sim3d\\server\\.venv\\Scripts\\python.exe sim3d\\tools\\p16_accept.py
+.\\sim3d\\server\\.venv\\Scripts\\python.exe sim3d\\tools\\p16_accept.py --only k2,k4 --skip-real
 
 # baseline video thật (ENTRY/EXIT/GID/merge) — P16b, dùng lại được cho mọi lần đo
-.\sim3d\server\.venv\Scripts\python.exe sim3d\tools\real_baseline.py --code-source head --config-set root --tag before
-.\sim3d\server\.venv\Scripts\python.exe sim3d\tools\real_baseline.py --code-source worktree --config-set root --tag current --markdown out\p16b_current.md
+.\\sim3d\\server\\.venv\\Scripts\\python.exe sim3d\\tools\\real_baseline.py --code-source head --config-set root --tag before
+.\\sim3d\\server\\.venv\\Scripts\\python.exe sim3d\\tools\\real_baseline.py --code-source worktree --config-set root --tag current --markdown out\\p16b_current.md
 
 # E2E UI thật (Playwright; cần BE đang chạy ở 8010)
-cd sim3d\web
-node ..\tools\e2e.mjs
+cd sim3d\\web
+node ..\\tools\\e2e.mjs
 
 # Pixel tất định: dựng frame 0/100/499 hai lần, so hash byte
-node ..\tools\pixel_hash.mjs
+node ..\\tools\\pixel_hash.mjs
 ```
 
 ## `p16_accept.py` — bộ nghiệm thu P16 (P16f)
@@ -290,10 +291,18 @@ SPEC_P16 §3 + ANS_22; ghi `sim3d/tools/out/p16_accept.json` + `.md` (bảng Đ�
 - Run sim cố định: `20261103-123426_K2-P15a`, `…125324_K4-P15a`, `…130806_K7-P15a`,
   `…132746_NightRain-P15a`.
 - `--only k2,k4` chạy nhanh khi đang sửa; `--skip-real` bỏ phần video thật.
+- `--repeat-real N` (mặc định **3**): mỗi trạng thái mã (`before` = HEAD, `after` = worktree)
+  chạy `real_baseline` N lần; R4 chấm theo **trung bình** ENTRY/EXIT (`after ≥ before`), báo
+  từng lần + trung bình + min. Các tiêu chí R4 khác (GID mới, merge, re-id, occupancy) giữ nguyên.
+- `--reuse-before <thư mục | glob | file...>`: dùng kết quả **before đã lưu** (ví dụ
+  `baseline_before_r1..r3.json` của P16l) thay vì replay before; vẫn chạy `after` N lần.
+  File thiếu/sai JSON/thiếu `totals`/không phải mã `head` → dừng với lỗi rõ.
 - **Song song tối đa 2 run**: cặp cổng `8040/8041` và `8050/8051`; video thật `8060/8061`.
   Không đụng 8001/8000 (đang chạy tay).
-- `--min-free-gb` (mặc định **3 GB**): dưới ngưỡng thì dừng, không chạy.
-- Một run sim ~13 phút (3600 frame); đầy đủ 4 run + video thật ~40 phút.
+- `--min-free-gb` (mặc định **3 GB**): dưới ngưỡng thì dừng, không chạy; kiểm lại trước **từng**
+  lần chạy real.
+- Một run sim ~13 phút (3600 frame); video thật ~10 phút/lần. Đầy đủ 4 run sim + 3×2 lần
+  video thật ~90 phút (P16f — 4 sim + 1 lần real — mất ~40 phút).
 
 ## `real_baseline.py` — baseline video thật (P16b)
 
@@ -301,8 +310,8 @@ Replay 3 session thật (`reidfix_r0b_session_*`) + `gate_session_controller` + 
 `predictions.jsonl`, ra bảng ENTRY/EXIT/GID mới/merge/re-id/handoff/lost.
 
 - `--code-source head` = bản đã commit (baseline "trước", không bị sửa giữa lúc đo);
-  `--code-source worktree` = mã đang có trên đĩa. Mặc định pin mã ra `<work-root>/_code/`
-  để agent khác sửa `backend/` không làm hỏng số đo (tắt bằng `--no-pin-code`).
+  `--code-source worktree` = mã đang có trên đĩa. Mặc định pin mã ra `<work-root>/_code/` để
+  agent khác sửa `backend/` không làm hỏng số đo (tắt bằng `--no-pin-code`).
 - `--config-set root` = bộ `config/` gốc (bộ đã dùng lúc quay, theo `session_info.json`);
   `session` = bộ recovered trong `config/sessions/`. **Baseline P16b dùng `root`.**
 - `--tag` đặt hậu tố thư mục để before/after không ghi đè `m1_gate/` của nhau.
@@ -400,9 +409,9 @@ Hai khối số, đừng lẫn:
 
 **Cỡ ảnh `s`.** Tool đọc `image_size`/`s` từ `MANIFEST.json`, không hard-code 400×640.
 GT `_u/_v` luôn ở cỡ gốc 640; export mới ghi `gt_pixel_scale` (= `s`) vào MANIFEST nên tool nhân đúng
-(run cũ không khai báo thì tool đoán bằng ngưỡng u ≤ 400 — không chắc với cam2, hãy ép `--gt-scale`). Ép bằng `--gt-scale 2`. Mask cũng được co
-theo `image_size` của MANIFEST nếu file mask còn ở cỡ gốc. Dòng đầu báo cáo in
-`ảnh W×H · s=… · GT×…` để kiểm ngay.
+(run cũ không khai báo thì tool đoán bằng ngưỡng u ≤ 400 — không chắc với cam2, hãy ép `--gt-scale`).
+Ép bằng `--gt-scale 2`. Mask cũng được co theo `image_size` của MANIFEST nếu file mask còn ở cỡ gốc.
+Dòng đầu báo cáo in `ảnh W×H · s=… · GT×…` để kiểm ngay.
 
 `e2e.mjs` in `PASS/FAIL/SKIP` và thoát mã 1 nếu có FAIL. Nó dùng cổng Vite 5200 (khác
 `shot.mjs` 5199) nên chạy song song được. Bước **"Chế độ quay (C2)"** kiểm canvas đúng pixel
@@ -433,6 +442,47 @@ Ba frame này **chỉ ở đường phát hình**: không đi vào video xuất,
 
 ---
 
+# D3. Cho team quay video thực tế
+
+> Thêm ngay sau "Chế độ Quay (quay màn hình)".
+
+## D3.1 Cho nhiều xe ra cùng lúc
+
+- Tick ô vuông đầu dòng xe đang đỗ để chọn.
+- Dùng **Nút "Cho N xe đã chọn ra cùng lúc"**, **"Chọn tất cả xe đỗ"**, **"Bỏ chọn"** để
+  gom nhiều xe rồi ra cùng một lúc.
+- Tuân theo luật D9: **không chèn sự kiện trước sự kiện cuối**. Nếu muốn cho một xe ra ở mẫu
+  có sẵn sự kiện, phải tua qua sự kiện cuối cùng trước khi thêm sự kiện mới cho xe đó.
+
+## D3.2 3 bộ kịch bản tải A/B/C
+
+- Bảng 12 kịch bản lấy từ mục **"Tổng quan"** của `sim3d/KICH_BAN_TAI.md`.
+- Cách nạp: ô **"Nạp mẫu"** → chọn kịch bản → **Xuất** (lưu lại kịch bản dưới dạng file).
+- Mỗi kịch bản chi tiết từng xe xem thêm trong `KICH_BAN_TAI.md`.
+- Sinh lại 12 file mẫu: `python sim3d/tools/gen_load_suites.py` (ghi `sim3d/data/templates/{A,B,C}*.sim3d.json`).
+  Sinh lại tài liệu: `python sim3d/tools/gen_load_doc.py` (cần chạy `npx vitest run src/sim/loadSuites.test.ts`
+  trước để có `tools/out/load_timeline/*.json`; bảng tổng quan có cột số lần lách).
+  Mức chạy sạch: 12 kịch bản phải qua `loadSuites.test.ts` (0 va chạm, 0 kẹt, mọi xe xong).
+
+## D3.3 Xe đi xuyên nhau (`ghost_pass`) — lỗi nặng, không được im lặng
+
+- Khi tải quá lớn, engine có lưới an toàn cuối: xe đứng yên ≥ 6 s (150 frame) **đi xuyên** xe đang
+  chặn nó (`ghost_pass`), có thể chồng tới ~3 m. Video có đoạn này **không dùng để đo TechGAR**.
+- **Trên UI:** thanh trạng thái hiện **dải đỏ** "XE ĐI XUYÊN NHAU — kịch bản quá tải — giãn nhịp
+  xe" kèm xe nào, frame nào, chồng bao nhiêu mét (`ui/GhostPassAlert.tsx`). Panel Xuất hiện dải
+  đỏ tương tự.
+- **Khi xuất:** `verify` thêm mục id 100 và **FAIL** nếu có `ghost_pass`
+  (`export/runExport.ts`, `withGhostPassVerdict`). Chi tiết từng lần nằm trong
+  `export_log.json` → `ghost_passes` (xe, khung frame, xe bị xuyên qua, độ chồng max).
+- Cách xử lý: **giãn nhịp** (tăng khoảng cách xe vào / nhịp xe đỗ sẵn rời) rồi xuất lại.
+  `python sim3d/tools/gen_load_suites.py --only <id> --out <thư_mục> --scale <id>=<hệ_số>`
+  sinh bản giãn tải (giữ seed/thời tiết/nhiễu, kéo dài video). Đo nhanh:
+  `LOAD_DIR=<thư_mục> npx vitest run src/sim/loadMeasure.test.ts` (trong `sim3d/web`) →
+  `<thư_mục>/measure.json` (xe lách, chồng max, va chạm, kẹt, xe chưa xong).
+  `LOAD_SCALE` trong `gen_load_suites.py` là hệ số đã chốt cho từng kịch bản.
+
+---
+
 # E. Lệnh kiểm khi sửa code
 
 ```powershell
@@ -442,10 +492,10 @@ npm test            # Vitest
 npm run build       # tsc --noEmit + vite build
 
 cd ..\server
-.\.venv\Scripts\python.exe -m pytest -q
+.\\.venv\Scripts\python.exe -m pytest -q
 
 cd D:\TechGar2
-.\sim3d\server\.venv\Scripts\python.exe -m pytest sim3d\tools -q
+.\\sim3d\\server\\.venv\\Scripts\\python.exe -m pytest sim3d\\tools -q
 ```
 
 `pytest sim3d/tools` cần `PYTHONIOENCODING=utf-8` trên Windows (test đọc stdout của Node).
@@ -467,6 +517,10 @@ cd D:\TechGar2
 | P9 | UI đầy đủ + 8 kịch bản mẫu | ✅ |
 | P10 | M1 động (K2/K6) + QA cuối | ⏳ K2/K6 phải xuất lại sau khi sửa lỗi sim |
 | P9d | Chế độ Quay (C2) + 3 frame đồng bộ, pixel tất định | ✅ |
+| P15 | Hệ số phóng ảnh `s=2` + mask ROI toàn mặt bãi | ✅ |
+| P16 | Sửa TechGAR: đứt track, GID dùng chung, đếm cổng (#3–#8, cờ `--legacy-…`) | ✅ có điều kiện (R1/R2 là hạn chế) |
+| P17 | Điều phối engine chống kẹt; bộ tải A/B/C (12 kịch bản); cấm xe xuyên nhau | ⏳ A1–A4 sạch; B/C còn lách (đang sửa engine/cua) |
+| P18 | K2 gate: sửa token nối nhầm mảnh (L-A) + gộp GID nguồn trẻ (L-B) | ✅ ENTRY 3/3; EXIT còn dao động theo tải máy |
 
 **Chưa làm (đã ghi trong `.orca/sim3d/QA_CHECKLIST.md`):** hash file mp4 giữa 2 lần xuất,
 test "không xoay tại chỗ khi v = 0", bộ config riêng cho 1 cam.
@@ -539,3 +593,10 @@ sim3d/
 - GT là trạng thái thật của mô phỏng; môi trường và nhiễu **không** được đổi GT.
 - World unit trong `techgar_config` là **"cm"** nhưng là cm trên bãi mô hình thu nhỏ (D2),
   `k = 5,116 / bề rộng ô trung vị` ⇒ `k ≈ 2,062`.
+
+## P17l — cua V_far_w và cung giao lộ (4/11)
+- `V_far_w`: cung phải → đoạn thẳng → cung trái, **R = 2,9 m** (ngoại lệ có chủ ý, phương án B; làn chỉ rộng 2,8 m giữa hàng 4 và 5), nhập A2 ở u = 33,2. Biên L-GATE cổng ra còn **1,95 m** (< 2,0): chấp nhận, test (`lotReachability`, `test_lot.py`) cho phép ≥ 1,9 m riêng làn này; `loadSuites` (lái thật) phải không quét.
+- Bốn góc ≈ 90° còn lại (V_west→A1, A1→V_east, V_east_s→A3) được thay bằng cung R = 4,1 m nằm trong làn kế tiếp. Ba góc tại A2 (V_east→A2, A2→V_east_s, A2→V_west) dùng **lối nối** `V_east_m`, `V_east_n`, `V_west_n` (`connector: true`, không dùng làm làn vào/ra ô).
+- `V_east_n` bắt đầu trên làn cổng vào (cách vạch 0,7 m): ngoại lệ L-GATE, xe đã qua vạch.
+- `network.ts`: bỏ lối nối khi chọn làn vào ô; gộp các cạnh thẳng hàng của cùng làn; bỏ điểm đã vượt điểm bắt đầu cung vào ô (không lùi lại).
+- Sinh lại bằng `sim3d/server/.venv/Scripts/python.exe sim3d/tools/build_lot.py`; `count_slots.json` không đổi (ô không đổi).

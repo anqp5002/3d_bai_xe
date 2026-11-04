@@ -178,6 +178,21 @@ export function yieldsTo(a: CarState, b: CarState, world: PriorityWorld): boolea
   return a.id > b.id;
 }
 
+/**
+ * Khoá so sánh ưu tiên **đã đóng băng** (P17m): nhỏ hơn = được đi trước.
+ *
+ * Xuất ra để `engine` tính khoá **một lần** cho mọi xe với **cùng một** `world`, rồi sort theo khoá
+ * đó. Cần vậy vì `yieldsTo` khi gọi theo từng cặp với `zones` khác nhau có thể **không bắc cầu**;
+ * dùng nó làm comparator của `Array.sort` sẽ cho thứ tự không ổn định (lead review P17m mục 2).
+ * Sắp theo khoá đóng băng thì quan hệ là **thứ tự toàn phần thật** (khoá cuối là số hiệu xe).
+ */
+export function priorityKeyOf(
+  car: CarState,
+  world: PriorityWorld,
+): readonly [number, number, number, number, number] {
+  return priorityKey(car, world);
+}
+
 /** Mô tả ngắn để đưa vào cảnh báo/test. */
 export function describePriority(a: CarState, b: CarState, world: PriorityWorld): string {
   const winner = yieldsTo(a, b, world) ? b : a;

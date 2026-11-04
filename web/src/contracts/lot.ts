@@ -98,6 +98,8 @@ export interface Aisle {
   readonly width_m: number;
   /** D6: toàn bộ lối là một chiều. Giữ literal `true` để không ai lỡ tạo làn 2 chiều. */
   readonly oneway: true;
+  /** P17l: lối nối cung ở giao lộ — đi được nhưng không dùng làm làn vào/ra ô. */
+  readonly connector?: boolean;
 }
 
 /** Cổng vào/ra: đoạn thẳng trên mặt đất, kèm điểm sinh/biến mất ngoài khung (C8). */

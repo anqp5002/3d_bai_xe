@@ -19,6 +19,7 @@ import type { CarStateName, SimState, Warning } from '../contracts/sim';
 import lotJson from '../../../data/lot/lot_pucpr.json';
 import { advanceSimState, createSimState } from './engine';
 import { DT_S } from './constants';
+import { countHarshBrakes } from './segments';
 import { describeStalls, findStalls, findStillAtEnd } from './stallCheck';
 import { describeQueue, findAbandonedQueue } from './stallCheck';
 
@@ -136,8 +137,24 @@ describe('bộ tải A/B/C chạy sạch trên engine', () => {
           .map((warning) => warning.car_id)
           .filter((id): id is string => typeof id === 'string'),
       );
+      // ANS_37 mục 6: số lần phanh gấp (giảm tốc > 2·b_comf) trên mọi xe, ghi số (không chặn).
+      const speedsByCar = new Map<string, number[]>();
+      for (const snapshot of history) {
+        for (const car of snapshot.cars) {
+          if (car.state === 'parked' || car.state === 'queued' || car.state === 'exited') {
+            continue;
+          }
+          const list = speedsByCar.get(car.id) ?? [];
+          list.push(Math.max(0, car.v));
+          speedsByCar.set(car.id, list);
+        }
+      }
+      let harshBrakes = 0;
+      for (const speeds of speedsByCar.values()) {
+        harshBrakes += countHarshBrakes(speeds, DT_S);
+      }
       console.info(
-        `[${file}] cars=${String(history[history.length - 1].cars.length)} ` +
+        `[${file}] harshBrakes=${String(harshBrakes)} cars=${String(history[history.length - 1].cars.length)} ` +
           `collisions=${String(collisions.length)} warnings=${String(otherWarnings.length)} ` +
           `stalls=${String(stalls.length)} stillEnd=${String(still.length)} abandoned=${String(abandoned.length)} ` +
           `ghost=${String(ghostCarIds.size)} ghostDepthMax=${ghostDepthMax.toFixed(3)}`,
@@ -146,6 +163,8 @@ describe('bộ tải A/B/C chạy sạch trên engine', () => {
         console.info(otherWarnings.slice(0, 5).map((item) => item.text).join('\n'));
       }
       expect(collisions).toEqual([]);
+      // ANS_36: cấm lách — ghost_pass tắt mặc định, nên phải 0 xe lách.
+      expect(ghostCarIds.size, `xe lách: ${[...ghostCarIds].join(',')}`).toBe(0);
       expect(stalls, describeStalls(stalls)).toEqual([]);
       expect(still).toEqual([]);
       expect(abandoned, describeQueue(abandoned)).toEqual([]);

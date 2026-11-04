@@ -11,9 +11,19 @@
  * - Lỗi encoder ⇒ ném lên và `abort()` dọn dẹp, không để lại mp4 thiếu frame.
  */
 
-import { BufferTarget, Mp4OutputFormat, Output, VideoSample, VideoSampleSource } from 'mediabunny';
+import {
+  BufferTarget,
+  Mp4OutputFormat,
+  Output,
+  StreamTarget,
+  VideoSample,
+  VideoSampleSource,
+} from 'mediabunny';
 import { EXPORT_FPS } from './index';
-import { ExportError, type FrameEncoder, type FrameSurface } from './runExport';
+import { ExportError, type FrameEncoder, type FrameSurface, type VideoSink } from './runExport';
+
+/** Kích thước khúc đẩy lên BE khi mã hoá dòng, byte (8 MiB). */
+export const STREAM_CHUNK_BYTES = 8 * 1024 * 1024;
 
 /**
  * Cấu hình H.264 mặc định (FE §7: ~4 Mbps cho 640×640, keyframe mỗi 50 frame).
@@ -124,12 +134,26 @@ function canvasOf(surface: FrameSurface): HTMLCanvasElement | OffscreenCanvas {
 export async function createWebCodecsEncoder(
   width: number,
   height: number,
+  /** Có sink ⇒ đẩy MP4 lên BE theo khúc (RAM ~hằng số, P17n); không có ⇒ giữ cả file trong RAM. */
+  sink: VideoSink | null = null,
 ): Promise<FrameEncoder | null> {
   if (!(await isEncoderSupported(width, height))) {
     return null;
   }
 
-  const target = new BufferTarget();
+  // Ghi dòng: mediabunny phát `{ data, position }`; ta chờ BE nhận xong từng khúc (áp lực ngược).
+  const target =
+    sink === null
+      ? new BufferTarget()
+      : new StreamTarget(
+          new WritableStream({
+            write: async (chunk) => {
+              // Sao chép: mediabunny có thể tái dùng bộ đệm sau khi Promise xong.
+              await sink.write(new Uint8Array(chunk.data), chunk.position);
+            },
+          }),
+          { chunked: true, chunkSize: STREAM_CHUNK_BYTES },
+        );
   const output = new Output({ format: new Mp4OutputFormat(), target });
   const source = new VideoSampleSource({
     codec: 'avc',
@@ -153,6 +177,7 @@ export async function createWebCodecsEncoder(
   };
 
   return {
+    streamed: sink !== null,
     addFrame: async (frame, surface, timestampUs) => {
       if (closed) {
         fail(`addFrame sau khi đã đóng (frame ${String(frame)})`, null);
@@ -183,7 +208,12 @@ export async function createWebCodecsEncoder(
       try {
         await ensureStarted();
         await output.finalize();
-        const buffer = target.buffer;
+        if (sink !== null) {
+          // Mọi khúc đã lên BE (finalize chờ WritableStream đóng); đổi tên `.part` -> file thật.
+          await sink.commit();
+          return null;
+        }
+        const buffer = (target as BufferTarget).buffer;
         if (buffer === null || buffer === undefined) {
           return null;
         }

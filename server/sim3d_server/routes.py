@@ -33,6 +33,8 @@ ROUTES = (
     Route("GET", "/api/runs", runs.list_runs),
     Route("GET", "/api/runs/{run_id}", runs.get_run),
     Route("PUT", "/api/runs/{run_id}/files/{path...}", runs.put_file),
+    Route("PUT", "/api/runs/{run_id}/parts/{offset}/{path...}", runs.put_part),
+    Route("POST", "/api/runs/{run_id}/commit/{path...}", runs.commit_part),
     Route("POST", "/api/runs/{run_id}/frames", runs.post_frame),
     Route("POST", "/api/runs/{run_id}/finalize", runs.finalize),
     Route("POST", "/api/runs/{run_id}/open-folder", runs.open_folder),

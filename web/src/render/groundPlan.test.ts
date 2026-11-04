@@ -95,7 +95,7 @@ describe('render/groundPlan — tiện ích hình học', () => {
 describe('render/groundPlan — lòng làn', () => {
   it('mỗi đoạn polyline thành một hình bình hành đúng bề rộng', () => {
     const corridors = aisleCorridors(LOT, 0);
-    // A2 có 5 điểm ⇒ 4 đoạn; tổng số đoạn của 7 làn = 4+1+1+1+1+1+3 = 12.
+    // A2 có 5 điểm ⇒ 4 đoạn; số đoạn = tổng đoạn polyline của mọi làn (có cung P17l).
     const expected = LOT.aisles.reduce((sum, aisle) => sum + (aisle.polyline.length - 1), 0);
     expect(corridors).toHaveLength(expected);
     for (const corridor of corridors) {
@@ -122,8 +122,9 @@ describe('render/groundPlan — lòng làn', () => {
     }
   });
 
-  it('7 làn đều một chiều (D6) — không có làn hai chiều để render khác đi', () => {
-    expect(LOT.aisles).toHaveLength(7);
+  it('7 làn chính + 3 lối nối cung (P17l) đều một chiều (D6)', () => {
+    expect(LOT.aisles).toHaveLength(10);
+    expect(LOT.aisles.filter((aisle) => aisle.connector !== true)).toHaveLength(7);
     for (const aisle of LOT.aisles) {
       expect(aisle.oneway).toBe(true);
     }

@@ -62,7 +62,12 @@ def test_files_exist_and_match_generator(
 
 def test_no_extra_template_files() -> None:
     on_disk = {path.name for path in gt.TEMPLATES_DIR.glob("*.sim3d.json")}
+    import gen_load_suites as gls
+
+    # K1–K8 (gen_templates) + 12 kịch bản tải (gen_load_suites.SUITES) + LONG5 (thử xuất dài, P17n).
     expected = {f"{template_id}.sim3d.json" for template_id in TEMPLATE_IDS}
+    expected |= {f"{spec.id}.sim3d.json" for spec in gls.SUITES}
+    expected.add("LONG5.sim3d.json")
     assert on_disk == expected
 
 

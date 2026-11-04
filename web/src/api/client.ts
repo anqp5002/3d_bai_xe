@@ -206,6 +206,29 @@ export const api = {
     });
   },
 
+  /**
+   * `PUT /api/runs/<run_id>/parts/<offset>/<path>` — ghi một khúc video tại vị trí `offset`
+   * (mã hoá video dòng, P17n). Khúc đầu phải ở offset 0; không cho tạo lỗ.
+   */
+  async putRunPart(runId: string, relPath: string, offset: number, body: Uint8Array): Promise<void> {
+    if (relPath.includes('..') || relPath.startsWith('/') || relPath.startsWith('\\')) {
+      throw new Error(`putRunPart: đường dẫn không hợp lệ "${relPath}"`);
+    }
+    if (!Number.isInteger(offset) || offset < 0) {
+      throw new Error(`putRunPart: offset phải là số nguyên ≥ 0, nhận ${String(offset)}`);
+    }
+    await requestVoid(`/runs/${encodeURIComponent(runId)}/parts/${String(offset)}/${relPath}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'video/mp4' },
+      body: body as BodyInit,
+    });
+  },
+
+  /** `POST /api/runs/<run_id>/commit/<path>` — hoàn tất video đã ghi theo khúc. */
+  async commitRunPart(runId: string, relPath: string): Promise<void> {
+    await requestVoid(`/runs/${encodeURIComponent(runId)}/commit/${relPath}`, { method: 'POST' });
+  },
+
   /** `POST /api/runs/<run_id>/frames` — đường dự phòng PNG → ffmpeg (BE §4.3). */
   async postRunFrame(runId: string, frameIndex: number, png: Blob): Promise<void> {
     const form = new FormData();

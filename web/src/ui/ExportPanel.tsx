@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import type { Object3D } from 'three';
 import type { CarModel } from '../contracts/sim';
 import type { VerifyReport } from '../api/client';
-import type { ExportLog, ExportOutput, ExportProgress } from '../export/runExport';
+import {
+  describeGhostPasses,
+  GHOST_OVERLOAD_MESSAGE,
+  type ExportLog,
+  type ExportOutput,
+  type ExportProgress,
+} from '../export/runExport';
 import { useSimStore } from '../store/simStore';
 import { loadCarTemplates } from './carAssets';
 import { startScenarioExport, type ScenarioExportHandle } from './exportAdapter';
@@ -233,6 +239,12 @@ export function ExportPanel() {
               : ' · đúng kỳ vọng 0'}
           </p>
         </>
+      )}
+      {exportLog !== null && exportLog.ghost_passes.length > 0 && (
+        <p className="ghost-alert" role="alert">
+          <b>⚠ VIDEO CÓ XE ĐI XUYÊN NHAU — {GHOST_OVERLOAD_MESSAGE}.</b>{' '}
+          {describeGhostPasses(exportLog.ghost_passes)}
+        </p>
       )}
       {fallbackReasons.length > 0 && (
         <p className="warn-note">

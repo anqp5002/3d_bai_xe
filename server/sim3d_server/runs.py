@@ -170,6 +170,82 @@ def put_file(request: Request, paths: DataPaths, params: dict[str, str]) -> Resp
     return Response.no_content()
 
 
+#: Mỗi lần ghi khúc tối đa ngần này byte (khúc phía client mặc định 8 MiB).
+MAX_PART_BYTES = 64 * 1024**2
+
+
+def _video_relative(raw_path: str) -> str:
+    """Chỉ ``raw_*.mp4`` được ghi theo khúc (các file khác nhỏ, dùng ``PUT .../files/``)."""
+    relative = _check_relative(raw_path)
+    if Path(relative).suffix != ".mp4":
+        raise HttpError(
+            400,
+            ERROR_NAMES[400],
+            f"{relative}: ghi theo khúc chỉ dành cho video .mp4",
+        )
+    return relative
+
+
+def put_part(request: Request, paths: DataPaths, params: dict[str, str]) -> Response:
+    """``PUT /api/runs/<run_id>/parts/<offset>/<path>`` — ghi một khúc video tại vị trí ``offset``.
+
+    Dành cho mã hoá video **dòng** (P17n/ANS_34): mediabunny ``StreamTarget`` phát các lệnh ghi
+    ``(dữ liệu, vị trí)`` — hầu hết nối đuôi nhưng cuối cùng quay lại sửa kích thước ``mdat`` ở đầu
+    file, nên cần ghi theo vị trí, không chỉ nối đuôi. Ghi vào ``<path>.part``; ``commit`` mới đổi
+    tên thành file thật. Không cho tạo "lỗ" (``offset`` không được vượt cỡ file hiện có).
+    """
+    run_dir = _require_run(paths, params["run_id"])
+    relative = _video_relative(params["path"])
+    _check_content_type(relative, request.header("Content-Type"))
+    offset_text = params["offset"]
+    if not offset_text.isdigit():
+        raise HttpError(400, ERROR_NAMES[400], f"offset phải là số nguyên ≥ 0, nhận {offset_text!r}")
+    offset = int(offset_text)
+    if request.header("Content-Length") is None:
+        raise HttpError(
+            400,
+            ERROR_NAMES[400],
+            "thiếu Content-Length; BE ghi file theo luồng (BE §3)",
+        )
+    length = request.content_length
+    if length <= 0:
+        raise HttpError(400, ERROR_NAMES[400], "khúc rỗng")
+    if offset + length > config.MAX_VIDEO_BYTES:
+        raise HttpError(
+            413,
+            ERROR_NAMES[413],
+            f"{relative}: offset {offset} + khúc {length} vượt {config.MAX_VIDEO_BYTES} byte",
+        )
+    part = run_dir / (relative + ".part")
+    part.parent.mkdir(parents=True, exist_ok=True)
+    existing = part.stat().st_size if part.exists() else 0
+    if offset > existing:
+        raise HttpError(
+            409,
+            ERROR_NAMES[409],
+            f"{relative}: offset {offset} vượt cỡ hiện có {existing} (không cho tạo lỗ)",
+        )
+    with part.open("r+b" if part.exists() else "wb") as handle:
+        handle.seek(offset)
+        for chunk in request.iter_body(MAX_PART_BYTES):
+            handle.write(chunk)
+    return Response.no_content()
+
+
+def commit_part(request: Request, paths: DataPaths, params: dict[str, str]) -> Response:
+    """``POST /api/runs/<run_id>/commit/<path>`` — hoàn tất video ghi theo khúc (đổi tên ``.part``)."""
+    run_dir = _require_run(paths, params["run_id"])
+    relative = _video_relative(params["path"])
+    part = run_dir / (relative + ".part")
+    if not part.is_file():
+        raise HttpError(404, ERROR_NAMES[404], f"{relative}: chưa có khúc nào để hoàn tất")
+    if part.stat().st_size <= 0:
+        part.unlink(missing_ok=True)
+        raise HttpError(400, ERROR_NAMES[400], f"{relative}: file rỗng")
+    os.replace(part, run_dir / relative)
+    return Response.no_content()
+
+
 def post_frame(request: Request, paths: DataPaths, params: dict[str, str]) -> Response:
     """``POST /api/runs/<run_id>/frames`` — nhận một PNG, ghi ``frames_tmp/%06d.png``."""
     run_dir = _require_run(paths, params["run_id"])

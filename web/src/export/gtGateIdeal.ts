@@ -73,20 +73,40 @@ export function gtGateIdeal(
   if (history.length === 0) {
     return [];
   }
-  const lines = buildCountLines(lot);
-  // Tính chiều từ chính dữ liệu (không hard-code): lot thật có p1.y > p2.y, lot test ngược lại.
-  const direction = countLineDirection(lot);
-  const directions = [direction.entry, direction.exit] as const;
-
-  // Máy trạng thái: tập car_id đang có phiên.
-  const hasSession = new Set<string>();
-  const previous = new Map<string, Vec2>();
-  const rows: GateIdealRow[] = [];
-
-  const passesDirection = (sign: number, direction: 'positive' | 'negative'): boolean =>
-    direction === 'positive' ? sign > 0 : sign < 0;
-
+  const stream = new GateIdealStream(lot, visibleAt);
   for (const state of history) {
+    stream.push(state);
+  }
+  return stream.rows;
+}
+
+/**
+ * Máy trạng thái cổng "lý tưởng" chạy **theo luồng** (P17n): gọi {@link GateIdealStream.push} đúng
+ * một lần mỗi frame, liên tiếp từ frame 0. Bộ nhớ O(số xe). `gtGateIdeal(lot, history)` là bọc
+ * quanh lớp này nên chỉ có một cài đặt duy nhất.
+ */
+export class GateIdealStream {
+  readonly rows: GateIdealRow[] = [];
+  private readonly lines;
+  private readonly directions: readonly ['positive' | 'negative', 'positive' | 'negative'];
+  /** Tập car_id đang có phiên. */
+  private readonly hasSession = new Set<string>();
+  private readonly previous = new Map<string, Vec2>();
+
+  constructor(
+    lot: LotMap,
+    private readonly visibleAt?: (carId: string, frame: number, kind: 'entry' | 'exit') => boolean,
+  ) {
+    this.lines = buildCountLines(lot);
+    // Tính chiều từ chính dữ liệu (không hard-code): lot thật có p1.y > p2.y, lot test ngược lại.
+    const direction = countLineDirection(lot);
+    this.directions = [direction.entry, direction.exit];
+  }
+
+  push(state: SimState): void {
+    const { lines, directions, hasSession, previous, rows, visibleAt } = this;
+    const passesDirection = (sign: number, direction: 'positive' | 'negative'): boolean =>
+      direction === 'positive' ? sign > 0 : sign < 0;
     const frame = state.frame;
     for (const car of state.cars) {
       const point: Vec2 = [car.pose.x, car.pose.y];
@@ -130,7 +150,6 @@ export function gtGateIdeal(
       }
     }
   }
-  return rows;
 }
 
 /** Header + CSV cho `gt_gate_ideal.csv` (ANS_18 mục 1). */

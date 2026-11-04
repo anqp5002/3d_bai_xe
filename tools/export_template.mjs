@@ -7,6 +7,7 @@
  *     cd sim3d/server && .venv/Scripts/python -m sim3d_server --root ../data
  *     node sim3d/tools/export_template.mjs --template K2 --mode 2cam --name K2-kiem-thu
  *     node sim3d/tools/export_template.mjs --template K6 --mode 2cam --name K6-kiem-thu
+ *     node sim3d/tools/export_template.mjs --template LONG5 --name dai5 --no-full   # bỏ raw_full
  *
  * Khác `export_k8.mjs` ở chỗ **không hard-code** K8/500 frame/30 xe: đọc thông số thật của
  * template từ `data/templates/<K>.sim3d.json` (số xe đỗ sẵn, số frame) rồi chờ đúng các mốc
@@ -76,6 +77,7 @@ function parseArgs(argv) {
     template: 'K8',
     name: null,
     cams: '2cam',
+    noFull: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -91,6 +93,9 @@ function parseArgs(argv) {
     } else if (arg === '--cams' || arg === '--mode') {
       args.cams = argv[index + 1];
       index += 1;
+    } else if (arg === '--no-full') {
+      // P17n/ANS_34: bỏ raw_full.mp4 (chỉ cam1 + cam2) để giảm tải xuất dài.
+      args.noFull = true;
     } else if (arg === '--keep-server') {
       args.keepServer = true;
     } else {
@@ -100,8 +105,15 @@ function parseArgs(argv) {
   if (!Number.isInteger(args.port) || args.port < 1 || args.port > 65535) {
     throw new Error(`--port không hợp lệ: ${String(args.port)}`);
   }
-  if (!TEMPLATE_IDS.includes(args.template)) {
-    throw new Error(`--template phải là ${TEMPLATE_IDS.join('|')}, nhận ${String(args.template)}`);
+  // K1…K8 hoặc bất kỳ mẫu nào có trong data/templates (A*/B*/C*, mẫu dài P17n…).
+  if (
+    !TEMPLATE_IDS.includes(args.template) &&
+    !(/^[A-Za-z0-9_]+$/.test(String(args.template)) &&
+      existsSync(resolve(TEMPLATES_DIR, `${String(args.template)}.sim3d.json`)))
+  ) {
+    throw new Error(
+      `--template phải là ${TEMPLATE_IDS.join('|')} hoặc tên một mẫu có trong data/templates, nhận ${String(args.template)}`,
+    );
   }
   if (args.cams !== '1cam' && args.cams !== '2cam') {
     throw new Error(`--cams/--mode phải là 1cam hoặc 2cam, nhận ${String(args.cams)}`);
@@ -316,6 +328,16 @@ async function loadTemplate(page, args, info) {
     }
     if (!(await checkbox.isChecked())) {
       await checkbox.check();
+    }
+  }
+
+  if (args.noFull) {
+    // Bỏ raw_full.mp4: bỏ tick ô "full ..." (nhãn bắt đầu bằng "full").
+    for (const checkbox of await exportPanel.locator('label:has(input[type="checkbox"])').all()) {
+      const text = (await checkbox.innerText()).trim().toLowerCase();
+      if (text.startsWith('full') && (await checkbox.locator('input').isChecked())) {
+        await checkbox.locator('input').uncheck();
+      }
     }
   }
 

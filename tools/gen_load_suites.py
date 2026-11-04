@@ -77,6 +77,9 @@ def kf(t_s: float, hour: float, weather: str, intensity: float, wet: float = 0.0
     return key
 
 
+# P17i: hệ số giãn tải đã chốt cho từng kịch bản (xem KICH_BAN_TAI.md); 1.0 = tải gốc.
+LOAD_SCALE: dict[str, float] = {}
+
 NOON = [kf(0, 12, "sun", 0.8)]
 SUITES: list[Spec] = [
     # ---------------- Bộ A: cao điểm vào ----------------
@@ -113,6 +116,30 @@ SUITES: list[Spec] = [
          [Wave(5, 60, 4.0, (30, 60))], n_parked=60, initial_leaves=[(10, 20, 15)],
          noise={"jpeg": 0.4, "drops": 0.4}),
 ]
+
+
+SETTLE_S = 240  # dư sau sự kiện cuối để xe vào ô, đỗ hết park_s, rồi ra khỏi bãi
+
+
+def scaled(spec: Spec, factor: float) -> Spec:
+    """Giảm tải: nhân mọi khoảng cách (xe vào, xe đỗ sẵn rời) với ``factor`` (>1 = thưa hơn).
+
+    Giữ nguyên seed, số xe, ``park_s``, thời tiết, nhiễu. Thời lượng kéo dài tới khi xe cuối cùng
+    vào + đỗ hết + ``SETTLE_S``, không bao giờ ngắn hơn bản gốc.
+    """
+    if abs(factor - 1.0) < 1e-9:
+        return spec
+    waves = [Wave(w.start_s, w.n, round(w.gap_s * factor, 3), w.park_s, w.speed) for w in spec.waves]
+    leaves = [(t, n, round(g * factor, 3)) for t, n, g in spec.initial_leaves]
+    last = 0.0
+    for w in waves:
+        park_hi = w.park_s[1] if w.park_s is not None else 0.0
+        last = max(last, w.start_s + (w.n - 1) * w.gap_s + park_hi)
+    for t, n, g in leaves:
+        last = max(last, t + (n - 1) * g)
+    duration = max(spec.duration_s, int(last + SETTLE_S))
+    return Spec(spec.id, spec.name, spec.description, spec.seed, duration, spec.env, waves,
+                spec.n_parked, leaves, spec.noise, spec.preset)
 
 
 def build(spec: Spec, lot: dict[str, Any]) -> dict[str, Any]:
@@ -166,10 +193,23 @@ def build(spec: Spec, lot: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--out", type=Path, default=TEMPLATES_DIR, help="thư mục ghi")
+    parser.add_argument("--only", nargs="*", default=None, help="chỉ các id này (vd B1_quay_vong_vua)")
+    parser.add_argument("--scale", nargs="*", default=[], metavar="ID=HESO",
+                        help="nhân khoảng cách xe với HESO cho kịch bản ID (P17i); mặc định lấy LOAD_SCALE")
+    args = parser.parse_args()
+    factors = {k: float(v) for k, v in (item.split("=", 1) for item in args.scale)}
+    args.out.mkdir(parents=True, exist_ok=True)
     lot = load_lot()
     for spec in SUITES:
-        path = TEMPLATES_DIR / f"{spec.id}.sim3d.json"
-        path.write_text(json.dumps(build(spec, lot), ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        if args.only is not None and spec.id not in args.only:
+            continue
+        spec = scaled(spec, factors.get(spec.id, LOAD_SCALE.get(spec.id, 1.0)))
+        path = args.out / f"{spec.id}.sim3d.json"
+        path.write_text(json.dumps(build(spec, lot), ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
         print(f"ghi {path.name}")
 
 

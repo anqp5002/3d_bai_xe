@@ -49,10 +49,23 @@ import { groupEventsByFrame, startSim } from '../store/scenarioModel';
 import { SceneController } from './SceneController';
 import { sunScreenPosition as sharedSunScreenPosition } from './liveNoise';
 
-/** `SimSource` chạy lười: `runExport` gọi `at(0..N−1)` liên tiếp nên chỉ cần một lượt. */
+/**
+ * `SimSource` chạy lười và **không giữ lịch sử** (P17n).
+ *
+ * `runExport` gọi `at(0..N−1)` đúng một lần, liên tiếp, nên chỉ cần giữ state hiện tại. Bản cũ giữ
+ * mọi state trong một mảng: 60 phút = 90.000 state (mỗi state có mọi xe + cảnh báo) ⇒ tràn RAM.
+ * `at(frame)` chỉ cho `frame` bằng frame hiện tại (gọi lại) hoặc tiến lên; lùi thì ném lỗi.
+ * `runToEnd()` (chỉ để test/công cụ nhỏ) dựng một lần chạy riêng và trả đủ mảng.
+ */
 export function createScenarioSimSource(lot: LotMap, scenario: Scenario): SimSource {
   const grouped = groupEventsByFrame(scenario.events);
-  const frames: SimState[] = [startSim(lot, scenario)];
+  let current: SimState = startSim(lot, scenario);
+
+  const advance = (state: SimState): SimState =>
+    step(lot, state, {
+      frame: state.frame,
+      events: grouped.get(state.frame) ?? [],
+    });
 
   const at = (frame: number): SimState => {
     if (!Number.isInteger(frame) || frame < 0 || frame >= scenario.duration_frames) {
@@ -60,15 +73,15 @@ export function createScenarioSimSource(lot: LotMap, scenario: Scenario): SimSou
         `at(${String(frame)}): frame phải trong [0, ${String(scenario.duration_frames)})`,
       );
     }
-    while (frames.length <= frame) {
-      const current = frames[frames.length - 1];
-      const next = step(lot, current, {
-        frame: current.frame,
-        events: grouped.get(current.frame) ?? [],
-      });
-      frames.push(next);
+    if (frame < current.frame) {
+      throw new RangeError(
+        `at(${String(frame)}): nguồn chạy một chiều, đang ở frame ${String(current.frame)} (P17n)`,
+      );
     }
-    return frames[frame];
+    while (current.frame < frame) {
+      current = advance(current);
+    }
+    return current;
   };
 
   return {
@@ -80,7 +93,10 @@ export function createScenarioSimSource(lot: LotMap, scenario: Scenario): SimSou
       if (scenario.duration_frames <= 0) {
         return [];
       }
-      at(scenario.duration_frames - 1);
+      const frames: SimState[] = [startSim(lot, scenario)];
+      while (frames.length < scenario.duration_frames) {
+        frames.push(advance(frames[frames.length - 1]));
+      }
       return frames;
     },
   };
@@ -365,9 +381,9 @@ export function startScenarioExport(options: ScenarioExportOptions): ScenarioExp
   const backend: ExportBackend = api;
   const fallbackReasons: string[] = [];
 
-  const encoders: EncoderFactory = async (output, size) => {
+  const encoders: EncoderFactory = async (output, size, sink) => {
     try {
-      const encoder = await createWebCodecsEncoder(size[0], size[1]);
+      const encoder = await createWebCodecsEncoder(size[0], size[1], sink ?? null);
       if (encoder === null) {
         fallbackReasons.push(
           `${output}: trình duyệt không encode được H.264 ${String(size[0])}×${String(size[1])}`,

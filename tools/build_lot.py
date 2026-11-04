@@ -499,8 +499,63 @@ LANE_FAR_MID_U = 50.0
 LANE_FAR_JOG_V = 435.0
 #: ``u`` nơi V_far_w **nhập A2** — trùng ``LANE_FAR_MID_U`` để đoạn nối cuối **thẳng đứng**
 #: (đoạn chéo làm khoảng cách tới vạch cổng nhỏ đi ở giữa đoạn và phá L-GATE).
-LANE_FAR_JOIN_U = 50.0
+LANE_FAR_JOIN_U = 33.2
 LANE_FAR_JOIN_V = 343.0
+
+#: P17l (phương án B, ANS_32/33): V_far_w = cung phải → đoạn thẳng → cung trái, bán kính
+#: ``FAR_W_TURN_R_M`` = 2,9 m (xe thật 3,86 m nhưng làn này chỉ rộng 2,8 m giữa hàng 4 và 5:
+#: ngoại lệ có chủ ý, test lái thật ``lotTurnRadius`` khoá). Không đổi vị trí ô.
+#: Nhập A2 ở ``u`` = ``LANE_FAR_JOIN_U``; góc α giải bằng chia đôi để điểm nhập đúng ``u`` đó.
+#: Biên L-GATE_out ≈ 1,95 m (< 2,0): chấp nhận vì xe lái thật không quét (ghi README).
+FAR_W_TURN_R_M = 2.9
+FAR_W_ARC_SEGMENTS = 12
+
+
+def _far_w_geometry(alpha: float) -> tuple[list[tuple[float, float]], tuple[float, float]]:
+    """Đường tim V_far_w (A3 → A2) cho góc quay ``alpha`` (rad); trả (đường, điểm nhập A2)."""
+    r = FAR_W_TURN_R_M
+    t0 = ground(LANE_FAR_LEFT_U, AISLE_V["A3"])
+    a2_y = ground(0.0, AISLE_V["A2"])[1]
+    d = a2_y - t0[1]
+    sa, ca = math.sin(alpha), math.cos(alpha)
+    mx = t0[0] - 2 * r * sa - (d - 2 * r + 2 * r * ca) * ca / sa
+    m = (mx, a2_y)
+
+    def rot(v: tuple[float, float], a: float) -> tuple[float, float]:
+        c, s = math.cos(a), math.sin(a)
+        return (v[0] * c - v[1] * s, v[0] * s + v[1] * c)
+
+    def arc(c: tuple[float, float], rv: tuple[float, float], sweep: float) -> list[tuple[float, float]]:
+        out = []
+        for i in range(FAR_W_ARC_SEGMENTS + 1):
+            q = rot(rv, sweep * i / FAR_W_ARC_SEGMENTS)
+            out.append((c[0] + q[0], c[1] + q[1]))
+        return out
+
+    c1 = (t0[0], t0[1] + r)
+    p1 = (t0[0] - r * sa, t0[1] + r - r * ca)
+    c2 = (m[0], m[1] - r)
+    t2 = (m[0] + r * sa, m[1] - r + r * ca)
+    leg = math.hypot(t2[0] - p1[0], t2[1] - p1[1])
+    n_leg = max(2, int(round(leg / 1.2)))
+    path = arc(c1, (0.0, -r), -alpha)
+    path += [(p1[0] + (t2[0] - p1[0]) * i / n_leg, p1[1] + (t2[1] - p1[1]) * i / n_leg) for i in range(1, n_leg + 1)]
+    path += arc(c2, (t2[0] - c2[0], t2[1] - c2[1]), alpha)[1:]
+    path[-1] = m
+    return path, m
+
+
+def far_w_path() -> list[tuple[float, float]]:
+    lo, hi = math.radians(88.0), math.radians(179.0)
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        _, m = _far_w_geometry(mid)
+        if project(m[0], m[1])[0] < LANE_FAR_JOIN_U:
+            lo = mid
+        else:
+            hi = mid
+    return _far_w_geometry((lo + hi) / 2)[0]
+
 #: Cổng vào **u=630** (P2b là 615). Phải dời ra đông vì làn dọc phải rộng 3,5 m ở u=594:
 #: L-GATE đòi mép làn cách vạch cổng ≥ 2,0 m, mà 615 − 594 = 21 px chỉ được 2,49 m − 1,75 m
 #: = 0,74 m. u=630 ⇒ 36 px ≈ 4,21 m − 1,75 = 2,46 m ✓. Xe vẫn sinh ngoài khung bên phải.
@@ -521,7 +576,10 @@ AISLE_WIDTH_M = {
     "V_east": 3.5,
     "V_east_s": 3.5,
     "V_west": 3.5,
-    "V_far_w": 2.8,}
+    "V_far_w": 2.8,
+    "V_east_m": 3.5,
+    "V_east_n": 3.5,
+    "V_west_n": 3.5,}
 
 #: Bề rộng làn tối thiểu cho làn **có xe chạy** (ANS_3 mục 2 bước 3: 2,8 m).
 MIN_DRIVE_LANE_M: Final = 2.8
@@ -560,6 +618,37 @@ DEFAULT_ROW_MAX_SHIFT_PX: Final = 8.0
 SLOT_AISLE = {"1": "A1", "2": "A1", "3": "A2", "4": "A2", "5": "A3"}
 
 
+
+#: P17l: cung nối R = 4,1 m ở ba góc ≈ 90° của vòng trong/ngoài (A1 đông, A1 tây, V_east → A2),
+#: để mọi lộ trình có cua ≥ ``MIN_TURN_RADIUS_M`` (4 m). Không đổi vị trí ô.
+JUNCTION_FILLET_R_M = 4.1
+JUNCTION_FILLET_SEGMENTS = 10
+
+
+def _fillet(
+    prev: tuple[float, float], corner: tuple[float, float], nxt: tuple[float, float], r: float
+) -> list[tuple[float, float]]:
+    """Cung R tiếp xúc hai đoạn prev→corner và corner→nxt; trả các điểm từ T1 tới T2."""
+    d1 = (corner[0] - prev[0], corner[1] - prev[1])
+    d2 = (nxt[0] - corner[0], nxt[1] - corner[1])
+    n1, n2 = math.hypot(*d1), math.hypot(*d2)
+    d1 = (d1[0] / n1, d1[1] / n1)
+    d2 = (d2[0] / n2, d2[1] / n2)
+    turn = math.atan2(d1[0] * d2[1] - d1[1] * d2[0], d1[0] * d2[0] + d1[1] * d2[1])
+    length = r * math.tan(abs(turn) / 2)
+    if length >= min(n1, n2):
+        raise ValueError("góc quá gần đỉnh kế, không đủ chỗ cho cung")
+    t1 = (corner[0] - d1[0] * length, corner[1] - d1[1] * length)
+    side = 1.0 if turn > 0 else -1.0
+    centre = (t1[0] - d1[1] * r * side, t1[1] + d1[0] * r * side)
+    start = math.atan2(t1[1] - centre[1], t1[0] - centre[0])
+    pts = []
+    for i in range(JUNCTION_FILLET_SEGMENTS + 1):
+        a = start + turn * i / JUNCTION_FILLET_SEGMENTS
+        pts.append((centre[0] + r * math.cos(a), centre[1] + r * math.sin(a)))
+    return pts
+
+
 @dataclass(frozen=True)
 class AisleData:
     """Một làn một chiều đã đổi sang mét."""
@@ -568,6 +657,7 @@ class AisleData:
     polyline: tuple[tuple[float, float], ...]
     width_m: float
     oneway: bool = True
+    connector: bool = False
 
 
 def build_aisles() -> tuple[list[AisleData], dict[str, tuple[float, float]]]:
@@ -597,12 +687,13 @@ def build_aisles() -> tuple[list[AisleData], dict[str, tuple[float, float]]]:
     def pt(u: float, v: float) -> tuple[float, float]:
         return ground(u, v)
 
+    far_w = far_w_path()
     nodes = {
         "g_in": pt(GATE_IN_U, AISLE_V["A2"]),
         "g_out": pt(GATE_OUT_U, AISLE_V["A2"]),
         "a1_right": pt(LANE_RIGHT_U, AISLE_V["A1"]),
         "a1_left": pt(LANE_LEFT_U_MID, AISLE_V["A1"]),
-        "a2_far_join": pt(LANE_FAR_JOIN_U, LANE_FAR_JOIN_V),
+        "a2_far_join": far_w[-1],
         "a3_left": pt(LANE_FAR_LEFT_U, AISLE_V["A3"]),
         "a3_right": pt(LANE_RIGHT_U, AISLE_V["A3"]),
         "far_jog": pt(LANE_FAR_LEFT_U, LANE_FAR_JOG_V),
@@ -621,34 +712,66 @@ def build_aisles() -> tuple[list[AisleData], dict[str, tuple[float, float]]]:
         nodes["a2_far_join"],
         nodes["g_out"],
     )
+    r = JUNCTION_FILLET_R_M
+    x_mid = nodes["x_mid_left"]
+    v_west = [x_mid, nodes["a1_left"]]
+    a1 = [nodes["a1_left"], nodes["a1_right"]]
+    east_mid = pt(LANE_RIGHT_U, AISLE_V["A2"])
+    v_east = [nodes["a1_right"], east_mid]
+    v_east_s = [east_mid, nodes["a3_right"]]
+    a2_list = list(a2_vertices)
+    # Góc V_west → A1 (tây): V_west kết thúc ở T1, cung nằm trong A1 (bắt đầu từ T1).
+    arc_w = _fillet(v_west[0], v_west[1], a1[1], r)
+    v_west = [v_west[0], arc_w[0]]
+    a1 = list(arc_w) + [a1[1]]
+    # Góc A1 → V_east (đông): A1 kết thúc ở T1, cung nằm trong V_east.
+    arc_e = _fillet(a1[-2], a1[-1], v_east[1], r)
+    a1 = a1[:-1] + [arc_e[0]]
+    v_east = list(arc_e) + [east_mid]
+    # Các góc tại A2: làn nối riêng (cung R 4,1 m) giữa hai làn; làn gốc vẫn đi thẳng.
+    i_e = a2_list.index(east_mid)
+    i_w = a2_list.index(x_mid)
+    # (1) V_east → A2 (hợp lưu về tây).
+    arc_m = _fillet(v_east[-2], east_mid, a2_list[i_e + 1], r)
+    v_east = v_east[:-1] + [arc_m[0], east_mid]
+    # (2) A2 → V_east_s (rẽ nam).
+    arc_s = _fillet(a2_list[i_e - 1], east_mid, v_east_s[1], r)
+    v_east_s = [east_mid, arc_s[-1], v_east_s[1]]
+    # (3) A2 → V_west (rẽ bắc).
+    arc_a = _fillet(a2_list[i_w - 1], x_mid, v_west[1], r)
+    v_west = [x_mid, arc_a[-1], v_west[1]]
+    # (4) V_east_s → A3 (rẽ tây hàng 5): V_east_s kết thúc ở T1, cung nằm trong A3.
+    a3_pts = [nodes["a3_right"], nodes["a3_left"]]
+    arc_3 = _fillet(v_east_s[-2], v_east_s[-1], a3_pts[1], r)
+    v_east_s = v_east_s[:-1] + [arc_3[0]]
+    a3_pts = list(arc_3) + [a3_pts[1]]
+    a2_list = (
+        a2_list[:i_e]
+        + [arc_s[0], east_mid, arc_m[-1]]
+        + a2_list[i_e + 1 : i_w]
+        + [arc_a[0], x_mid]
+        + a2_list[i_w + 1 :]
+    )
     aisles = [
         # Lối gom: cổng vào → cổng ra, hướng tây.
-        AisleData("A2", a2_vertices, AISLE_WIDTH_M["A2"]),
+        AisleData("A2", tuple(a2_list), AISLE_WIDTH_M["A2"]),
         # A2 → A1 ở phía tây, hướng bắc.
-        AisleData("V_west", (nodes["x_mid_left"], nodes["a1_left"]), AISLE_WIDTH_M["V_west"]),
+        AisleData("V_west", tuple(v_west), AISLE_WIDTH_M["V_west"]),
         # Hàng 1–2, hướng đông.
-        AisleData("A1", (nodes["a1_left"], nodes["a1_right"]), AISLE_WIDTH_M["A1"]),
+        AisleData("A1", tuple(a1), AISLE_WIDTH_M["A1"]),
         # A1 → A2 ở phía đông, hướng nam (khép vòng trong), rộng 3,5 m.
-        AisleData(
-            "V_east",
-            (nodes["a1_right"], pt(LANE_RIGHT_U, AISLE_V["A2"])),
-            AISLE_WIDTH_M["V_east"],
-        ),
+        AisleData("V_east", tuple(v_east), AISLE_WIDTH_M["V_east"]),
+        # Lối nối V_east → A2 (cung R 4,1 m) để xe ra về cổng ra không cua gắt.
+        AisleData("V_east_m", tuple(arc_m), AISLE_WIDTH_M["V_east"], connector=True),
+        # Lối nối A2 → V_east_s và A2 → V_west (cung R 4,1 m).
+        AisleData("V_east_n", tuple(arc_s), AISLE_WIDTH_M["V_east_s"], connector=True),
+        AisleData("V_west_n", tuple(arc_a), AISLE_WIDTH_M["V_west"], connector=True),
         # A2 → A3 ở phía đông, hướng nam (nhánh xuống hàng 5), cùng trục u nên liền mạch.
-        AisleData(
-            "V_east_s",
-            (pt(LANE_RIGHT_U, AISLE_V["A2"]), nodes["a3_right"]),
-            AISLE_WIDTH_M["V_east_s"],
-        ),
+        AisleData("V_east_s", tuple(v_east_s), AISLE_WIDTH_M["V_east_s"]),
         # Hàng 5, hướng tây.
-        AisleData("A3", (nodes["a3_right"], nodes["a3_left"]), AISLE_WIDTH_M["A3"]),
-        # Mép tây: A3 → bắc theo u=0 → đông theo dải trống v=352 (giữa hàng 3 và 4) → bắc theo
-        # u=58 → nhập A2 phía đông cổng ra (L-GATE). Trực giao, không đoạn chéo, không cắt ô.
-        AisleData(
-            "V_far_w",
-            (nodes["a3_left"], nodes["far_jog"], nodes["far_mid"], nodes["a2_far_join"]),
-            AISLE_WIDTH_M["V_far_w"],
-        ),
+        AisleData("A3", tuple(a3_pts), AISLE_WIDTH_M["A3"]),
+        # Mép tây (P17l B): cung phải → đoạn thẳng → cung trái R 2,9 m, nhập A2 ở u = 33,2.
+        AisleData("V_far_w", tuple(far_w), AISLE_WIDTH_M["V_far_w"]),
     ]
     return aisles, nodes
 
@@ -868,10 +991,10 @@ def build_decor(
         [
             [round(x, 4), round(y, 4)]
             for x, y in (
-                ground(0.0, LANE_FAR_JOG_V - 25.0),
-                ground(LANE_FAR_MID_U + 25.0, LANE_FAR_JOG_V - 25.0),
-                ground(LANE_FAR_MID_U + 25.0, a3_v + 34.0),
-                ground(0.0, a3_v + 34.0),
+                ground(-14.0, LANE_FAR_JOIN_V - 25.0),
+                ground(LANE_FAR_JOIN_U + 25.0, LANE_FAR_JOIN_V - 25.0),
+                ground(LANE_FAR_JOIN_U + 25.0, a3_v + 34.0),
+                ground(-14.0, a3_v + 34.0),
             )
         ]
     ]
@@ -1048,6 +1171,7 @@ def build_lot() -> tuple[dict[str, object], list[str]]:
                     "polyline": [[round(x, 4), round(y, 4)] for x, y in aisle.polyline],
                     "width_m": aisle.width_m,
                     "oneway": aisle.oneway,
+                    **({"connector": True} if aisle.connector else {}),
                 }
                 for aisle in aisles
             ],
@@ -1085,6 +1209,9 @@ LANE_COLORS: Final = {
     "V_east_s": (250, 150, 190),
     "V_west": (120, 120, 240),
     "V_far_w": (120, 200, 240),
+    "V_east_m": (140, 190, 140),
+    "V_east_n": (140, 190, 140),
+    "V_west_n": (140, 190, 140),
 }
 
 

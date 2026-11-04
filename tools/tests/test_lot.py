@@ -403,6 +403,12 @@ def test_l_gate_only_a2_crosses_gate_segments(lot: dict[str, Any]) -> None:
                 # Đoạn A2 vào/ra **phải** cắt một nửa đoạn cổng (một nửa, vì cổng dài 42 px và
                 # A2 là đường tâm của nó) — tức khoảng cách tâm = 0.
                 assert distance < 1e-4, f"A2 phải đi qua vạch cổng {gate_name}"
+            elif aisle["id"] == "V_east_n" and gate_name == "in":
+                # P17l: lối nối rẽ nam bắt đầu **trên chính làn cổng** A2 (xe đã qua vạch cổng).
+                continue
+            elif aisle["id"] == "V_far_w" and gate_name == "out" and clearance >= 1.9:
+                # P17l phương án B (director): cung R=2,9 m, biên 1,95 m < 2,0 — chấp nhận có chủ ý.
+                continue
             elif clearance < 2.0:
                 offenders.append(f"{aisle['id']}–cổng {gate_name}: {clearance:.2f} m < 2,0 m")
     assert offenders == [], f"vi phạm L-GATE: {offenders}"
@@ -420,7 +426,9 @@ def test_l_gate_a2_is_the_only_lane_through_the_gate(lot: dict[str, Any]) -> Non
             distance = min(
                 _seg_seg_distance(a, b, p1, p2) for a, b in itertools.pairwise(polyline)
             )
-            if distance <= aisle["width_m"] / 2.0:
+            if distance <= aisle["width_m"] / 2.0 and not (
+                aisle["id"] == "V_east_n" and gate_name == "in"  # P17l: bắt đầu trên làn cổng
+            ):
                 hits.append(f"{aisle['id']}:{gate_name}")
     assert sorted(hits) == ["A2:in", "A2:out"], f"làn cắt cổng: {hits}"
 
@@ -487,10 +495,14 @@ def test_gate_crossing_direction_is_west(lot: dict[str, Any]) -> None:
 def _polyline_hits_slot(polyline: list[list[float]], polygon: list[list[float]]) -> bool:
     import cv2
 
-    lane = np.array([[round(x * 100), round(y * 100)] for x, y in polyline], np.int32)
     slot = np.array([[round(x * 100), round(y * 100)] for x, y in polygon], np.int32)
-    hit, _ = cv2.intersectConvexConvex(lane, slot)
-    return bool(hit)
+    # P17l: làn có cung nên **không** gộp cả polyline thành một đa giác lồi — kiểm từng đoạn.
+    for (x0, y0), (x1, y1) in itertools.pairwise(polyline):
+        lane = np.array([[round(x0 * 100), round(y0 * 100)], [round(x1 * 100), round(y1 * 100)]], np.int32)
+        hit, _ = cv2.intersectConvexConvex(lane, slot)
+        if hit:
+            return True
+    return False
 
 
 def test_no_lane_crosses_a_slot(lot: dict[str, Any], slots: list[dict[str, Any]]) -> None:
@@ -516,7 +528,11 @@ def test_lane_polyline_is_straight_between_nodes(lot: dict[str, Any]) -> None:
             cross = abs(float(a[0] * b[1] - a[1] * b[0]))
             dot = abs(float(a[0] * b[0] + a[1] * b[1]))
             norm = float(np.linalg.norm(a) * np.linalg.norm(b))
-            assert cross / norm < 1e-5 or dot / norm < 1e-5, f"{aisle['id']}: khúc gãy chéo tại đỉnh {i}"
+            # P17l: cung R ≥ 2,9 m được lấy mẫu thành các đoạn nối nhau — gãy nhỏ (≤ 20°) là cung.
+            turn_deg = math.degrees(math.atan2(cross, float(a[0] * b[0] + a[1] * b[1])))
+            assert cross / norm < 1e-5 or dot / norm < 1e-5 or turn_deg <= 20.0, (
+                f"{aisle['id']}: khúc gãy chéo tại đỉnh {i}"
+            )
 
 
 # --------------------------------------------------------------------------------------

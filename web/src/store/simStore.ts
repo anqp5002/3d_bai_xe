@@ -7,6 +7,7 @@
  */
 
 import { create } from 'zustand';
+import { GhostPassAccumulator, ParkClipLog } from '../export/runLog';
 import type { LotMap, SlotId } from '../contracts/lot';
 import type { Scenario } from '../contracts/scenario';
 import { validateScenario } from '../contracts/scenario';
@@ -52,7 +53,19 @@ export interface SimStoreData {
   readonly lot: LotMap | null;
   readonly scenario: Scenario | null;
   readonly state: SimState | null;
+  /**
+   * Đuôi lịch sử: tối đa {@link HISTORY_TAIL_MAX} state gần nhất (P17n). Trước đây giữ mọi state
+   * (15 phút = 22.500 state, mỗi bước còn chép lại cả mảng ⇒ O(n²), tab tự tắt). Không ai cần
+   * state cũ hơn: UI chỉ đọc state hiện tại + tóm tắt cảnh báo ở `runLog`.
+   */
   readonly history: readonly SimState[];
+  /**
+   * Tóm tắt cảnh báo của cả lần chạy, cập nhật **tăng dần** O(cảnh báo mới) mỗi bước (P17n):
+   * `ghost_pass` gộp theo xe + `park_clip`. Đối tượng đổi tại chỗ; UI theo dõi `runLogVersion`.
+   */
+  readonly runLog: LiveRunLog;
+  /** Tăng mỗi khi `runLog` đổi (cảnh báo mới hoặc đặt lại). */
+  readonly runLogVersion: number;
   readonly eventLog: readonly SimEvent[];
   readonly mapSettings: MapSettings;
   readonly spawnModel: CarModel;
@@ -157,6 +170,45 @@ export interface AddCarsResult {
 const INITIAL_SCENARIO_NAME = 'scenario-1';
 const SCENARIO_NAME_RE = /^[A-Za-z0-9_-]+$/;
 
+/** Số state gần nhất giữ lại trong `history` (P17n). */
+export const HISTORY_TAIL_MAX = 600;
+
+/** Tóm tắt cảnh báo tăng dần của lần chạy hiện tại (P17n). */
+export interface LiveRunLog {
+  readonly ghost: GhostPassAccumulator;
+  readonly parkClip: ParkClipLog;
+}
+
+export function newRunLog(): LiveRunLog {
+  return { ghost: new GhostPassAccumulator(), parkClip: new ParkClipLog() };
+}
+
+/** Nối `added` vào đuôi `history`, giữ tối đa {@link HISTORY_TAIL_MAX} phần tử (không spread mảng lớn). */
+export function appendHistoryTail(
+  history: readonly SimState[],
+  added: readonly SimState[],
+): readonly SimState[] {
+  if (added.length >= HISTORY_TAIL_MAX) {
+    return added.slice(added.length - HISTORY_TAIL_MAX);
+  }
+  const keep = Math.min(history.length, HISTORY_TAIL_MAX - added.length);
+  const next: SimState[] = history.slice(history.length - keep);
+  for (const state of added) {
+    next.push(state);
+  }
+  return next;
+}
+
+/** State có cảnh báo mà `runLog` quan tâm không. */
+function touchesRunLog(state: SimState): boolean {
+  return state.warnings.some(
+    (warning) =>
+      warning.kind === 'ghost_pass' ||
+      warning.kind === 'park_clip' ||
+      warning.kind === 'park_clip_escalated',
+  );
+}
+
 /** Dữ liệu khởi tạo — test dùng lại để reset store mà giữ action. */
 export function createInitialStoreData(): SimStoreData {
   return {
@@ -164,6 +216,8 @@ export function createInitialStoreData(): SimStoreData {
     scenario: null,
     state: null,
     history: [],
+    runLog: newRunLog(),
+    runLogVersion: 0,
     eventLog: [],
     mapSettings: DEFAULT_MAP_SETTINGS,
     spawnModel: DEFAULT_SPAWN_MODEL,
@@ -205,6 +259,8 @@ function simFields(scenario: Scenario, state: SimState) {
     scenario,
     state,
     history: [state],
+    runLog: newRunLog(),
+    runLogVersion: Date.now(),
     eventLog: scenario.events,
     mapSettings: settingsFromScenario(scenario),
     cameraCount: scenario.camera_mode,
@@ -528,7 +584,7 @@ export const useSimStore = create<SimStore>()((set, get) => ({
   },
 
   stepFrames(count: number): void {
-    const { lot, scenario, state, history, eventLog, playing, leaderFramesLeft } = get();
+    const { lot, scenario, state, history, eventLog, playing, leaderFramesLeft, runLog, runLogVersion } = get();
     if (lot === null || scenario === null || state === null) {
       return;
     }
@@ -555,9 +611,19 @@ export const useSimStore = create<SimStore>()((set, get) => ({
       const nextState = result.state;
       const collision = collisionWarning(nextState);
       const done = nextState.frame >= scenario.duration_frames;
+      // P17n: cập nhật tóm tắt cảnh báo tăng dần; không giữ lại state cũ.
+      let runLogChanged = false;
+      for (const added of result.history) {
+        runLog.ghost.push(added);
+        runLog.parkClip.push(added);
+        if (!runLogChanged && touchesRunLog(added)) {
+          runLogChanged = true;
+        }
+      }
       set({
         state: nextState,
-        history: [...history, ...result.history],
+        history: appendHistoryTail(history, result.history),
+        ...(runLogChanged ? { runLogVersion: runLogVersion + 1 } : {}),
         playing: collision === null && !done ? playing : false,
         ...(collision === null ? {} : { notice: collision }),
       });
@@ -576,6 +642,8 @@ export const useSimStore = create<SimStore>()((set, get) => ({
       set({
         state,
         history: [state],
+        runLog: newRunLog(),
+        runLogVersion: get().runLogVersion + 1,
         playing: false,
         selectedCarId: null,
         selectedSlotId: null,

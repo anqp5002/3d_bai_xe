@@ -2,6 +2,7 @@
 
 import { useSimStore } from '../store/simStore';
 import { ParkClipCounter } from './ParkClipCounter';
+import { GhostPassAlert } from './GhostPassAlert';
 
 const WARNING_LABEL: Readonly<Record<string, string>> = {
   collision: 'VA CHẠM',
@@ -48,6 +49,8 @@ export function StatusBar() {
         )}
         {/* P7d mục 3: bộ đếm `park_clip` của kịch bản (ANS_4 mục 4). */}
         <ParkClipCounter />
+        {/* ANS_29: xe đi xuyên nhau (ghost_pass) = cảnh báo đỏ, không bao giờ im lặng. */}
+        <GhostPassAlert />
       </div>
 
       <div className="status-right">

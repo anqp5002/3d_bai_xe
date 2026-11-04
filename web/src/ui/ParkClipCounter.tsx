@@ -5,10 +5,11 @@
  * đỗ kề (ANS_4/5/6). Đây **không** phải lỗi, nhưng phải đếm được để QA biết cảnh có "dính"
  * hình hay không (detector/tracker có thể gộp khung nếu lấn nhiều).
  *
- * Component chỉ **đọc** `store.history` và gọi `sim/parkClip` (không sửa `sim/`).
+ * Component chỉ **đọc** `store.runLog` (tóm tắt tăng dần, P17n) và gọi `sim/parkClip` (không sửa `sim/`).
  */
 
 import { useMemo } from 'react';
+import { useThrottledVersion } from './useThrottledVersion';
 import type { Warning } from '../contracts/sim';
 import { useSimStore } from '../store/simStore';
 import {
@@ -22,31 +23,28 @@ const LONG_EPISODE_FRAMES = PARK_CLIP_LONG_EPISODE_FRAMES;
 
 export function ParkClipCounter() {
   const lot = useSimStore((store) => store.lot);
-  const history = useSimStore((store) => store.history);
+  const version = useSimStore((store) => store.runLogVersion);
+  const hasState = useSimStore((store) => store.state !== null);
+  // P17n: tính lại tối đa 2 lần/giây từ `runLog` (tóm tắt tăng dần), không duyệt cả lịch sử mỗi frame.
+  const refreshed = useThrottledVersion(version, 500);
 
   const stats = useMemo(() => {
-    if (lot === null || history.length === 0) {
+    if (lot === null || !hasState) {
       return null;
     }
-    // `park_clip` nằm trong `state.warnings` của từng frame — gom cả lịch sử rồi gộp đợt.
-    const warnings = history.flatMap((state) =>
-      state.warnings.filter((warning) => warning.kind === 'park_clip'),
-    );
-    const episodes = parkClipEpisodes(warnings, lot);
+    const log = useSimStore.getState().runLog.parkClip;
+    const episodes = parkClipEpisodes(log.parkClip, lot);
     // ANS_13: leo thang tách riêng, kỳ vọng 0 — nếu > 0 là xe kẹt thật do xe đỗ ô kề.
     // Đổi nhãn ở biên vì `sim/parkClip` (không được sửa) chỉ gộp `kind === 'park_clip'`.
-    const escalatedWarnings = history
-      .flatMap((state) =>
-        state.warnings.filter((warning) => warning.kind === 'park_clip_escalated'),
-      )
-      .map((warning): Warning => ({ ...warning, kind: 'park_clip' }));
+    const escalatedWarnings = log.escalated.map((warning): Warning => ({ ...warning, kind: 'park_clip' }));
     const escalated = parkClipEpisodes(escalatedWarnings, lot);
     return {
       summary: summarizeEpisodes(episodes),
       episodes,
       escalatedSummary: summarizeEpisodes(escalated),
     };
-  }, [lot, history]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lot, hasState, refreshed]);
 
   if (stats === null) {
     return (

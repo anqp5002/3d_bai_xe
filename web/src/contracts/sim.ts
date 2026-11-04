@@ -152,6 +152,13 @@ export interface CarState {
   readonly ghost_since_frame?: number;
   /** P17e — `route_s` lúc bắt đầu lách, m. Dùng để biết đã đi thêm ≥ 1 thân xe chưa. */
   readonly ghost_from_route_s?: number;
+  /** P17 (ANS_37): xe đi ngay trước/sau trên cùng chuỗi làn (để debug + UI). */
+  readonly leader_id?: string;
+  readonly follower_id?: string;
+  /** Xe ĐANG BỊ CHẶN bởi thân xe `blocked_by` đang nằm sau nó (xe sau cần lùi để nhường). */
+  readonly blocked_by?: string;
+  /** Xe này được yêu cầu lùi nhưng chưa lùi được (có xe sát phía sau) ⇒ xe sau cũng phải lùi. */
+  readonly back_demand?: boolean;
   /** Hết frame này thì thôi leo thang `park_clip` (ANS_13): giữ leo thang liên tục sau lần kích hoạt đầu. */
   readonly clip_escalated_until?: number;
   /** Thời gian đỗ theo yêu cầu `add_car.park_s`, giây (rỗng = đỗ tới khi có lệnh rời). */

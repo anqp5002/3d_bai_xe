@@ -16,11 +16,12 @@
 import type { LotMap } from '../contracts/lot';
 import type { CameraMode, Scenario } from '../contracts/scenario';
 import type { SimState, Warning } from '../contracts/sim';
-import type { GateNote, GtEventRow, GtFrameRow } from '../contracts/gt';
-import { gtEventsCsv, gtEvents, gtFramesCsv, frameTimestampsCsv, gtRow, collectCarIds } from '../sim/gtCompute';
+import type { GateNote } from '../contracts/gt';
+import { gtEventsCsv, frameTimestampsCsv, GtEventsStream, GtFramesStream } from '../sim/gtCompute';
 import { parkClipEpisodes, summarizeEpisodes, type ParkClipEpisode, type ParkClipEpisodeSummary } from '../sim/parkClip';
 import { buildCountLines, lotWithCountLines } from './countLines';
-import { gtGateIdeal, gtGateIdealCsv } from './gtGateIdeal';
+import { GateIdealStream, gtGateIdealCsv } from './gtGateIdeal';
+import { GhostPassAccumulator, ParkClipLog, type ExportGhostPass } from './runLog';
 import { EXPORT_FPS, SYNC_LEADER_FRAMES } from './index';
 import { buildTechgarConfig } from './techgarBundle';
 import { TECHGAR_SCALE } from './techgarConfig';
@@ -106,8 +107,15 @@ export type FrameSurfaces = Readonly<Record<ExportOutput, FrameSurface>>;
 export interface FrameEncoder {
   /** Nạp một frame; `timestampUs = frame × 40000` (25 fps). */
   addFrame(frame: number, surface: FrameSurface, timestampUs: number): Promise<void>;
-  /** Kết thúc và trả file MP4 (hoặc `null` nếu encoder không tạo được file). */
+  /**
+   * Kết thúc và trả file MP4 (hoặc `null` nếu encoder không tạo được file).
+   *
+   * Encoder **dòng** (`streamed = true`, P17n) đã đẩy file lên BE theo khúc và `commit` xong:
+   * `finish()` trả `null` và đó là thành công, không phải "không tạo được file".
+   */
   finish(): Promise<Uint8Array | null>;
+  /** Encoder này đẩy video lên BE theo khúc (RAM video ~hằng số) — xem {@link VideoSink}. */
+  readonly streamed?: boolean;
   /** Huỷ giữa chừng; phải dọn tài nguyên và **không** để lại file dở (D12). */
   abort(): Promise<void>;
 }
@@ -120,7 +128,18 @@ export interface FrameEncoder {
 export type EncoderFactory = (
   output: ExportOutput,
   size: readonly [number, number],
+  /** Nơi đẩy video theo khúc lên BE (P17n); `null` = BE không hỗ trợ ⇒ encoder giữ file trong RAM. */
+  sink?: VideoSink | null,
 ) => FrameEncoder | null | Promise<FrameEncoder | null>;
+
+/**
+ * Đích ghi video theo khúc: mediabunny `StreamTarget` phát `(dữ liệu, vị trí)`; nối đuôi là chính,
+ * cuối cùng quay lại sửa đầu file. `commit` đóng file thật trên BE.
+ */
+export interface VideoSink {
+  write(data: Uint8Array, position: number): Promise<void>;
+  commit(): Promise<void>;
+}
 
 /**
  * Cổng tạm dừng (D12: tab ẩn thì dừng). Ở trình duyệt nối với `visibilitychange`;
@@ -150,8 +169,13 @@ export interface SimSource {
   readonly totalFrames: number;
   /** Trạng thái tại frame `frame` (0-based, `0 ≤ frame < totalFrames`). */
   at(frame: number): SimState;
-  /** Chạy hết và trả lịch sử đủ mọi frame. */
-  runToEnd(): readonly SimState[];
+  /**
+   * Chạy hết và trả lịch sử đủ mọi frame (chỉ dùng cho test nhỏ).
+   *
+   * P17n: `runExport` KHÔNG gọi nữa — GT tính theo luồng trong vòng render để không giữ 90.000
+   * state (60 phút) trong RAM.
+   */
+  runToEnd?(): readonly SimState[];
 }
 
 /** Tập con của `api` mà `runExport` cần — để test tiêm bản giả. */
@@ -164,6 +188,9 @@ export interface ExportBackend {
   }): Promise<{ readonly run_id: string }>;
   putRunFile(runId: string, relPath: string, body: Blob | ArrayBuffer): Promise<void>;
   postRunFrame(runId: string, frameIndex: number, png: Blob): Promise<void>;
+  /** Ghi video theo khúc (P17n). Có cả hai hàm thì `runExport` mã hoá video dòng. */
+  putRunPart?(runId: string, relPath: string, offset: number, data: Uint8Array): Promise<void>;
+  commitRunPart?(runId: string, relPath: string): Promise<void>;
   finalize(runId: string): Promise<VerifyReport>;
 }
 
@@ -283,15 +310,51 @@ export interface ExportLog {
   readonly ghost_passes: readonly ExportGhostPass[];
 }
 
-/** Một lần lách đã gộp theo xe (P17e). */
-export interface ExportGhostPass {
-  readonly car_id: string;
-  readonly start_frame: number;
-  readonly end_frame: number;
-  /** Id các xe bị lách qua (đã gộp, sắp xếp). */
-  readonly through: readonly string[];
-  /** Độ chồng lấn lớn nhất trong lần lách này, m. */
-  readonly depth_max_m: number;
+export type { ExportGhostPass };
+
+/** Id mục kiểm "xe lách" thêm ở phía web (backend chỉ có mục 1–n của BE §6). */
+export const GHOST_VERIFY_ITEM_ID = 100;
+
+/** Câu cảnh báo cố định (ANS_29): dùng chung cho verify và cảnh báo đỏ trên UI. */
+export const GHOST_OVERLOAD_MESSAGE = 'kịch bản quá tải — giãn nhịp xe';
+
+/** Mô tả ngắn các lần lách để đưa vào cảnh báo (tối đa 6 xe đầu, còn lại gộp "…"). */
+export function describeGhostPasses(passes: readonly ExportGhostPass[]): string {
+  const shown = passes
+    .slice(0, 6)
+    .map(
+      (pass) =>
+        `${pass.car_id} (frame ${String(pass.start_frame)}–${String(pass.end_frame)}, xuyên ${pass.through.join(',')}, chồng ${pass.depth_max_m.toFixed(2)} m)`,
+    )
+    .join('; ');
+  return passes.length > 6 ? `${shown}; … (+${String(passes.length - 6)} lần nữa)` : shown;
+}
+
+/**
+ * ANS_29: video có xe xuyên nhau (`ghost_pass`) thì `verify` **FAIL**, không im lặng.
+ * Backend không biết `ghost_pass`, nên web ghép thêm một mục vào báo cáo nhận về.
+ */
+export function withGhostPassVerdict(
+  verify: VerifyReport,
+  passes: readonly ExportGhostPass[],
+): VerifyReport {
+  if (passes.length === 0) {
+    return verify;
+  }
+  return {
+    ...verify,
+    ok: false,
+    items: [
+      ...verify.items,
+      {
+        id: GHOST_VERIFY_ITEM_ID,
+        ok: false,
+        detail:
+          `ghost_pass: ${String(passes.length)} lần xe đi xuyên nhau — ${GHOST_OVERLOAD_MESSAGE}. ` +
+          describeGhostPasses(passes),
+      },
+    ],
+  };
 }
 
 /** Kiểm `outputs` hợp lệ và không rỗng (R2: báo lỗi sớm). */
@@ -349,6 +412,19 @@ export async function runExport(options: ExportOptions): Promise<ExportResult> {
     fps: EXPORT_FPS,
   });
   const runId = created.run_id;
+  // P17n: nếu BE hỗ trợ ghi theo khúc thì video đi thẳng lên BE (RAM ~hằng số), không giữ cả MP4.
+  const videoSinkFor = (output: ExportOutput): VideoSink | null => {
+    const put = backend.putRunPart?.bind(backend);
+    const commitPart = backend.commitRunPart?.bind(backend);
+    if (put === undefined || commitPart === undefined) {
+      return null;
+    }
+    const name = fileNameFor(output);
+    return {
+      write: (data, position) => put(runId, name, position, data),
+      commit: () => commitPart(runId, name),
+    };
+  };
   // Mọi đầu ra dùng cùng hệ số `s` (BRIEF_P15): ảnh cam 800×1280 khi s=2.
   const scale = options.scale ?? TECHGAR_SCALE;
   const sizes = outputSizesAt(scale);
@@ -358,7 +434,7 @@ export async function runExport(options: ExportOptions): Promise<ExportResult> {
   let modeUsed: 'webcodecs' | 'png_fallback' = 'webcodecs';
   try {
     for (const output of outputs) {
-      const encoder = await encoders(output, sizes[output]);
+      const encoder = await encoders(output, sizes[output], videoSinkFor(output));
       if (encoder === null) {
         modeUsed = 'png_fallback';
         continue;
@@ -385,6 +461,16 @@ export async function runExport(options: ExportOptions): Promise<ExportResult> {
   let pausedMs = 0;
   const warnings: string[] = [];
 
+  // P17n: GT + cảnh báo tính **theo luồng** trong chính vòng render (mỗi state đúng một lần), không
+  // giữ cả history — 60 phút = 90.000 state sẽ tràn RAM. `lotWithCountLines` chỉ phụ thuộc bãi nên
+  // dựng được trước khi chạy.
+  const countLines = buildCountLines(sim.lot);
+  const gtFrames = new GtFramesStream(sim.lot, mode);
+  const gtEventsStream = new GtEventsStream(lotWithCountLines(sim.lot, countLines));
+  const gateIdealStream = new GateIdealStream(sim.lot);
+  const ghostAccumulator = new GhostPassAccumulator();
+  const parkClipLog = new ParkClipLog();
+
   try {
     for (let frame = 0; frame < sim.totalFrames; frame += 1) {
       if (options.shouldCancel?.() === true) {
@@ -398,6 +484,17 @@ export async function runExport(options: ExportOptions): Promise<ExportResult> {
       }
 
       const state = sim.at(frame);
+      if (state.frame !== frame) {
+        throw new ExportError(
+          'config',
+          `sim.at(${String(frame)}) trả frame ${String(state.frame)}; GT cần đủ mọi frame liên tiếp`,
+        );
+      }
+      gtFrames.push(state);
+      gtEventsStream.push(state);
+      gateIdealStream.push(state);
+      ghostAccumulator.push(state);
+      parkClipLog.push(state);
       const surfaces = renderer.render(state, outputs);
 
       // Kiểm kích thước: sai là lỗi lập trình, không được đẩy lên BE.
@@ -453,41 +550,37 @@ export async function runExport(options: ExportOptions): Promise<ExportResult> {
         );
       }
       if (bytes === null) {
-        warnings.push(`encoder ${output} không tạo được file (bỏ qua)`);
+        if (encoder.streamed !== true) {
+          warnings.push(`encoder ${output} không tạo được file (bỏ qua)`);
+        }
         continue;
       }
       await putFile(backend, runId, fileNameFor(output), toArrayBuffer(bytes));
     }
 
-    // Ghi GT + kịch bản + config sau khi có đủ history (P5b ghi chú 7).
-    const history = sim.runToEnd();
-    if (history.length !== sim.totalFrames) {
+    // Ghi GT + kịch bản + config sau khi đã chạy hết (P5b ghi chú 7; P17n: GT đã tính theo luồng).
+    if (gtFrames.frameCount !== sim.totalFrames) {
       throw new ExportError(
         'config',
-        `history có ${String(history.length)} frame nhưng totalFrames = ${String(sim.totalFrames)}; ` +
+        `GT nhận ${String(gtFrames.frameCount)} frame nhưng totalFrames = ${String(sim.totalFrames)}; ` +
           'gtEvents cần đủ mọi frame liên tiếp',
       );
     }
-    const frameRows: GtFrameRow[] = history.map((state) => gtRow(sim.lot, state, mode));
-    const carIds = collectCarIds(history);
     // GT `gate_in_frame`/`gate_out_frame` tính tại **vạch đếm** (ANS_14/P11), không phải vạch
     // cổng vẽ: cổng vẽ sát mép khung nên tracker chưa có Global ID khi xe đi qua. Cùng một
     // `countLines` dùng cho cả `gt_events.csv` và `gate_zones.json` ⇒ hai bên không thể lệch.
-    const countLines = buildCountLines(sim.lot);
     const gateNotes = options.gateNotes ?? new Map<string, GateNote>();
     const flaggedSlots = [...gateNotes.entries()].map(([slot, flag]) => ({ slot, flag }));
-    const eventRows: GtEventRow[] = [
-      ...gtEvents(lotWithCountLines(sim.lot, countLines), history, gateNotes),
-    ];
+    const eventRows = [...gtEventsStream.finish(gateNotes)];
 
-    await putFile(backend, runId, 'gt_frames.csv', encode(gtFramesCsv(frameRows, carIds)));
+    await putFile(backend, runId, 'gt_frames.csv', encode(gtFrames.finish()));
     await putFile(backend, runId, 'gt_events.csv', encode(gtEventsCsv(eventRows)));
 
     // ANS_18: GT "bộ đếm lý tưởng" — chạy đúng máy trạng thái của
     // `gate_session_controller.py:498-534` trên quỹ đạo tâm thật. Khác `gt_events.csv` ở chỗ:
     // `gt_events` là ngữ nghĩa (xe có vào/ra bãi không), còn file này là con số một tracker
     // hoàn hảo sẽ đếm được với vạch/camera hiện tại.
-    const gateIdealRows = gtGateIdeal(sim.lot, history);
+    const gateIdealRows = gateIdealStream.rows;
     await putFile(
       backend,
       runId,
@@ -521,10 +614,8 @@ export async function runExport(options: ExportOptions): Promise<ExportResult> {
       warnings.push('chế độ 1 cam: không xuất techgar_config/ (TechGAR cần 2 cam)');
     }
 
-    // `park_clip` từ đúng history đã dùng để tính GT (cùng nguồn dữ liệu, không đọc lại).
-    const parkClipWarnings = history.flatMap((state) =>
-      state.warnings.filter((warning) => warning.kind === 'park_clip'),
-    );
+    // `park_clip` từ đúng các state đã dùng để tính GT (cùng nguồn dữ liệu, không đọc lại).
+    const parkClipWarnings = parkClipLog.parkClip;
     const parkClip: ExportParkClip = {
       episodes: parkClipEpisodes(parkClipWarnings, sim.lot),
       summary: summarizeEpisodes(parkClipEpisodes(parkClipWarnings, sim.lot)),
@@ -533,78 +624,15 @@ export async function runExport(options: ExportOptions): Promise<ExportResult> {
     // `park_clip_escalated` (ANS_13): cùng cơ chế nhưng **loại riêng**, kỳ vọng 0 ở K2–K8.
     // Tách khỏi `park_clip` để ai đọc log thấy ngay có leo thang hay không, không phải lọc.
     // Đổi nhãn ở biên vì `sim/parkClip` (không được sửa) chỉ gộp `kind === 'park_clip'`.
-    const escalatedWarnings = history
-      .flatMap((state) =>
-        state.warnings.filter((warning) => warning.kind === 'park_clip_escalated'),
-      )
-      .map(asParkClipKind);
+    const escalatedWarnings = parkClipLog.escalated.map(asParkClipKind);
     const parkClipEscalated: ExportParkClip = {
       episodes: parkClipEpisodes(escalatedWarnings, sim.lot),
       summary: summarizeEpisodes(parkClipEpisodes(escalatedWarnings, sim.lot)),
     };
 
     const finishedMs = clock.nowMs();
-    // P17e: gộp các cảnh báo `ghost_pass` **theo xe** thành khoảng frame để người đo biết đoạn nào
-    // hai xe chồng nhau. `ghost_pass` được phát mỗi frame khi còn chồng lấn, nên gộp theo xe +
-    // khoảng frame liên tiếp là đúng ý nghĩa ("một lần lách").
-    const ghostPasses: ExportGhostPass[] = [];
-    const ghostOpen = new Map<
-      string,
-      { start: number; end: number; through: Set<string>; depth: number }
-    >();
-    for (const state of history) {
-      const seenThisFrame = new Set<string>();
-      for (const warning of state.warnings) {
-        if (warning.kind !== 'ghost_pass' || typeof warning.car_id !== 'string') {
-          continue;
-        }
-        const carId = warning.car_id;
-        seenThisFrame.add(carId);
-        const match = /chồng ([\d.]+) m/.exec(warning.message);
-        const depth = match === null ? 0 : Number(match[1]);
-        const through = /lách qua ([^ ]+)/.exec(warning.message)?.[1] ?? '';
-        const open = ghostOpen.get(carId);
-        if (open === undefined) {
-          ghostOpen.set(carId, {
-            start: state.frame,
-            end: state.frame,
-            through: new Set(through === '' ? [] : through.split(',')),
-            depth: Number.isFinite(depth) ? depth : 0,
-          });
-          continue;
-        }
-        open.end = state.frame;
-        for (const id of through === '' ? [] : through.split(',')) {
-          open.through.add(id);
-        }
-        if (Number.isFinite(depth)) {
-          open.depth = Math.max(open.depth, depth);
-        }
-      }
-      // Xe không còn cảnh báo ở frame này ⇒ đóng lần lách của nó.
-      for (const [carId, open] of [...ghostOpen.entries()]) {
-        if (seenThisFrame.has(carId)) {
-          continue;
-        }
-        ghostPasses.push({
-          car_id: carId,
-          start_frame: open.start,
-          end_frame: open.end,
-          through: [...open.through].sort(),
-          depth_max_m: Number(open.depth.toFixed(3)),
-        });
-        ghostOpen.delete(carId);
-      }
-    }
-    for (const [carId, open] of ghostOpen.entries()) {
-      ghostPasses.push({
-        car_id: carId,
-        start_frame: open.start,
-        end_frame: open.end,
-        through: [...open.through].sort(),
-        depth_max_m: Number(open.depth.toFixed(3)),
-      });
-    }
+    // P17e: các lần lách đã gộp theo xe + khoảng frame liên tiếp (tính theo luồng, xem runLog.ts).
+    const ghostPasses: ExportGhostPass[] = ghostAccumulator.snapshot();
 
     const exportLog: ExportLog = {
       run_id: runId,
@@ -627,7 +655,8 @@ export async function runExport(options: ExportOptions): Promise<ExportResult> {
     };
     await putFile(backend, runId, 'export_log.json', encode(`${JSON.stringify(exportLog, null, 1)}\n`));
 
-    const verify = await backend.finalize(runId);
+    const backendVerify = await backend.finalize(runId);
+    const verify = withGhostPassVerdict(backendVerify, ghostPasses);
     return { runId, verify, exportLog, frames: frameCounts };
   } catch (error) {
     // D12: huỷ thì dọn encoder, không để lại file dở.

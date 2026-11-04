@@ -53,7 +53,7 @@ import { MAX_ACCEL_MPS2 } from './drive';
 import { MIN_GAP_M, followSpeed } from './follow';
 import { canEnterGate } from './gates';
 import type { GateCar } from './gates';
-import { yieldsTo } from './priority';
+import { priorityKeyOf, yieldsTo } from './priority';
 import type { PriorityWorld } from './priority';
 import { convexHull, pointAtDistance, round6 } from './geometry';
 import {
@@ -83,6 +83,15 @@ import type { ReservationRequest } from './reservations';
 import { STUCK_FRAMES, updateStuck } from './stuck';
 import type { StuckTracker } from './stuck';
 import { SimError } from './errors';
+import {
+  MERGE_CELL_RADIUS_M,
+  findMergeCells,
+  idmTargetSpeed,
+  routeCellPasses,
+  shouldBackOff,
+  shouldYieldByBacking,
+} from './segments';
+import type { MergeCell, RouteCellPass } from './segments';
 
 /** Tốc độ người dùng đặt, m/s (FE §2: 5–20 km/h). */
 export const MIN_SPEED_MPS = 5 / 3.6;
@@ -736,6 +745,7 @@ function gateDistanceAlongRoute(
 }
 
 interface LeaderInfo {
+  readonly id?: string;
   readonly gap: number;
   readonly speed: number;
 }
@@ -748,8 +758,6 @@ interface LeaderInfo {
  * 115 m).
  */
 const GATE_QUEUE_HOLD_M = 12;
-/** Đầu hàng cổng đứng yên ≥ ngần này frame thì xe sau không còn chờ nó theo thứ tự cổng (P17g). */
-const GATE_HEAD_STALE_FRAMES = 75;
 /**
  * Xe **phía trước trên cùng lộ trình** (dùng cho bám xe D7 và kẹp khoảng hở).
  *
@@ -799,7 +807,7 @@ function leaderGap(
     void world;
     const gap = projection.s - routeS - (car.length + other.length) / 2;
     if (best === null || gap < best.gap) {
-      best = { gap, speed: Math.abs(other.v) };
+      best = { id: other.id, gap, speed: Math.abs(other.v) };
     }
   }
   return best;
@@ -1058,7 +1066,37 @@ const GHOST_EXEMPT_STATES: ReadonlySet<CarStateName> = new Set<CarStateName>([
  * cụm theo khoảng cách (≤ {@link GHOST_CLUSTER_RADIUS_M}), trong mỗi cụm lấy xe có **số hiệu nhỏ
  * nhất**. Nhờ vậy hai xe không lách vào nhau, và kết quả không phụ thuộc thứ tự duyệt.
  */
+/**
+ * P17 (ANS_36): `ghost_pass` (xe xuyên qua xe khác) là cờ dev, **tắt mặc định** — anh An cấm lách.
+ * Bật lại để debug: `setGhostPassEnabled(true)`. Khi tắt, xe kẹt phải được gỡ bằng điều phối
+ * (`sim/segments.ts`), không bằng cách xuyên thân.
+ */
+/** Dev: ghi lý do mỗi xe đang bị giữ (`id → lý do`); null = tắt. Chỉ dùng chẩn đoán. */
+let waitSink: Map<string, string> | null = null;
+
+export function setWaitSink(sink: Map<string, string> | null): void {
+  waitSink = sink;
+}
+
+function noteWait(carId: string, why: string): void {
+  if (waitSink !== null && !waitSink.has(carId)) {
+    waitSink.set(carId, why);
+  }
+}
+
+/** Xe vừa chặn bước đi gần nhất của `clipCheck` (để xe bị chặn biết ai đang sát phía sau). */
+let lastClipBlocker: CarState | null = null;
+
+let ghostPassEnabled = false;
+
+export function setGhostPassEnabled(enabled: boolean): void {
+  ghostPassEnabled = enabled;
+}
+
 function computeGhostPasses(cars: readonly CarState[]): ReadonlySet<string> {
+  if (!ghostPassEnabled) {
+    return new Set<string>();
+  }
   const eligible = cars.filter(
     (car) =>
       !GHOST_EXEMPT_STATES.has(car.state) &&
@@ -1169,6 +1207,11 @@ export function advanceSimState(
   const head = cars
     .filter((car) => car.state === 'queued')
     .sort((a, b) => carNumber(a.id) - carNumber(b.id))[0];
+  // P17m (ANS_32 + TASK_P17d "chống đói"): **điều tiết cổng vào.** Gap-acceptance (luật 1) giữ xe
+  // trong ô lâu hơn, nên nếu vẫn thả xe mới vào đều thì bãi đầy và `add_car` bị từ chối ("không còn
+  // ô trống phù hợp"). Khi có xe **chờ ra** đã lâu mà chưa lùi được, giữ xe mới ở cổng (`queued`)
+  // cho tới khi nó bắt đầu ra. Tất định và **không thể sinh vòng**: xe `queued` nằm ngoài bãi,
+  // không chắn ai bên trong.
   if (head !== undefined && canEnterGate(inGateCars, head.id).ok) {
     const direction = gateTravelDirection(lot.gates.in);
     cars = cars.map((car) =>
@@ -1222,6 +1265,38 @@ export function advanceSimState(
     });
   }
   requests.sort((a, b) => {
+    const byPriority = reservationPriority(a.op) - reservationPriority(b.op);
+    return byPriority !== 0 ? byPriority : a.car_id.localeCompare(b.car_id);
+  });
+  // P17m (ANS_32): **claim vùng chỉ cấp cho xe đứng đầu theo thứ tự toàn phần.** Thứ tự vùng dùng
+  // `yieldsTo` (nguồn ưu tiên duy nhất), KHÔNG phải "op rồi id" như bản cũ: hai thước đo khác nhau
+  // chính là nguồn vòng chờ (V044 chờ cấp vùng, mà V022 lại nhường claim của V044).
+  //
+  // Lead (P17m review mục 2): KHÔNG gọi `yieldsTo` trong comparator với `zones` theo từng cặp —
+  // quan hệ đó có thể **không bắc cầu** (zones của cặp này khác cặp kia) nên `sort` cho thứ tự
+  // không ổn định. Thay vào đó: chốt **một** `world` (zones = các vùng ĐANG giữ, giống hệt nhau cho
+  // mọi lần so), tính khoá ưu tiên **một lần** cho từng xe, rồi sort theo khoá đã đóng băng.
+  const frozenWorld: PriorityWorld = { reservations, zones: reservations.map((item) => item.polygon) };
+  const frozenKeys = new Map<string, readonly number[]>(
+    cars.map((car) => [car.id, priorityKeyOf(car, frozenWorld)]),
+  );
+  const compareKeys = (a: readonly number[], b: readonly number[]): number => {
+    for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
+      if (a[index] !== b[index]) {
+        return a[index] - b[index];
+      }
+    }
+    return 0;
+  };
+  requests.sort((a, b) => {
+    const keyA = frozenKeys.get(a.car_id);
+    const keyB = frozenKeys.get(b.car_id);
+    if (keyA !== undefined && keyB !== undefined) {
+      const byKey = compareKeys(keyA, keyB);
+      if (byKey !== 0) {
+        return byKey;
+      }
+    }
     const byPriority = reservationPriority(a.op) - reservationPriority(b.op);
     return byPriority !== 0 ? byPriority : a.car_id.localeCompare(b.car_id);
   });
@@ -1398,8 +1473,154 @@ export function advanceSimState(
     return still === (car.still_frames ?? 0) ? car : { ...car, still_frames: still };
   });
 
+  cars = withChainLinks(cars);
   return { frame: nextFrame, cars, reservations, rngState, warnings };
 }
+
+/**
+ * P17 (ANS_37 mục 1): gắn `leader_id`/`follower_id` cho xe chạy trên làn (xe ngay trước/sau cùng làn,
+ * trong tầm {@link CHAIN_LEADER_RANGE_M}). Chỉ để debug/UI — không tham gia quyết định chuyển động.
+ */
+function withChainLinks(cars: readonly CarState[]): CarState[] {
+  const leaderOf = new Map<string, string>();
+  const followerOf = new Map<string, string>();
+  const running = cars.filter((car) => CRUISE_STATES.has(car.state));
+  for (const car of running) {
+    let best: CarState | undefined;
+    let bestAlong = Number.POSITIVE_INFINITY;
+    for (const other of cars) {
+      if (other.id === car.id || other.state === 'exited' || other.state === 'queued') {
+        continue;
+      }
+      if (!isLeaderCandidate(car, other)) {
+        continue;
+      }
+      const along =
+        (other.pose.x - car.pose.x) * Math.cos(car.pose.th) +
+        (other.pose.y - car.pose.y) * Math.sin(car.pose.th);
+      if (along < bestAlong) {
+        bestAlong = along;
+        best = other;
+      }
+    }
+    if (best !== undefined) {
+      leaderOf.set(car.id, best.id);
+      if (!followerOf.has(best.id)) {
+        followerOf.set(best.id, car.id);
+      }
+    }
+  }
+  return cars.map((car) => {
+    const leader = leaderOf.get(car.id);
+    const follower = followerOf.get(car.id);
+    if (leader === car.leader_id && follower === car.follower_id) {
+      return car;
+    }
+    return { ...car, leader_id: leader, follower_id: follower };
+  });
+}
+
+/** Thời gian dự phòng thêm khi xét "xe sắp tới vùng lùi ra", giây (TASK_P17d luật 1: `+ 1 s`). */
+const EXIT_GAP_SLACK_S = 1;
+
+/**
+ * P17m (ANS_32 + TASK_P17d luật 1) — **chấp nhận khoảng trống** trước khi lùi ra khỏi ô.
+ *
+ * Chỉ cho bắt đầu `leaving_slot` khi vùng quét của **cả thao tác lùi ra** đang trống: không thân
+ * xe nào (trừ xe đỗ yên trong ô — vật cản tĩnh đã biết, `park_clip` lo).
+ *
+ * Trước bản vá này, xe cứ lùi ra bất kể làn có xe, rồi bị `clipCheck`/`yieldSpeedFor` chặn giữa
+ * đường lùi ⇒ đứng chắn làn A2 ⇒ kéo cả dòng xe, cuối cùng `ghost_pass` "xuyên" qua xe đỗ.
+ * Đo ở B1 (tải gốc): **15/32 lần lách là `leaving_slot`** đứng giữa làn (x ≈ −23…−5).
+ *
+ * Xe không đủ khoảng trống thì **ở yên trong ô** (`parked`), frame sau thử lại. Trạng thái đó là
+ * "chờ ra", đúng TASK_P17d luật 1 — **không** tính là kẹt.
+ */
+/**
+ * Bãi đã dùng ≥ ngần này phần sức chứa ⇒ **bỏ gap-acceptance**, cứ cho xe ra.
+ *
+ * Vì sao cần một luật "xả": gap-acceptance (luật 1) làm xe trong ô chờ khe, nên khi bãi gần đầy thì
+ * **không còn ô trống** và `add_car` bị từ chối (`không còn ô trống phù hợp`). Đo ở C1 tải gốc (60 xe
+ * đỗ sẵn + 60 xe vào, đỗ 30–60 s): 2 sự kiện bị từ chối ở frame 5825/5925 — `loadSuites` đỏ.
+ *
+ * Ngưỡng 0,9 là **thực nghiệm**: đo được 0,9 thì `loadSuites` xanh 13/13; còn "chỉ xả khi kín 100 %"
+ * thì vẫn đỏ (lúc đó đã quá muộn — `add_car` bị từ chối trước khi bãi kín), và ngưỡng rộng hơn thì
+ * lách tăng.
+ *
+ * An toàn: khi xả, `exitGapClear` vẫn giữ điều kiện **không xuyên thân xe**; `clipCheck` là chốt cuối
+ * của engine nên không thể sinh `collision` (đo 12 kịch bản: 0 va chạm).
+ */
+const EXIT_GAP_SKIP_OCCUPANCY_RATIO = 0.9;
+
+function exitGapClear(
+  lot: LotMap,
+  car: CarState,
+  exitRoute: Route,
+  cars: readonly CarState[],
+): boolean {
+  // Bãi gần đầy ⇒ đừng chờ khe nữa (`skipLookahead`), NHƯNG **vẫn** phải kiểm "không xuyên thân
+  // xe": bỏ luôn phép kiểm đó gây 51 va chạm ở C4. Chỉ nới phần DỰ BÁO, không nới phần hình học.
+  const skipLookahead =
+    usedSlots(cars).size >= lot.slots.length * EXIT_GAP_SKIP_OCCUPANCY_RATIO;
+  const maneuverEnd = exitRoute.maneuver_end_s ?? exitRoute.length_m;
+  const zone = maneuverPolygon(
+    exitRoute,
+    0,
+    Math.min(exitRoute.length_m, maneuverEnd + MANEUVER_TAIL_M * car.length),
+    car.width,
+    car.length,
+  );
+  // Thời gian cần để lùi ra xong + dự phòng. Xe nào **sắp đi vào** vùng trong khoảng này cũng phải
+  // chờ, nếu không nó sẽ ập tới đúng lúc xe đang lùi và cả hai khoá nhau (đo ở B3: `V023` bắt đầu
+  // lùi khi vùng trống nhưng 150 frame sau vẫn đứng ở `rs = 0` vì xe khác vừa tới).
+  const reverseSeconds = maneuverEnd / MANEUVER_SPEED_MPS + EXIT_GAP_SLACK_S;
+  for (const other of cars) {
+    if (other.id === car.id || other.state === 'exited') {
+      continue;
+    }
+    // Xe ĐỖ YÊN trong ô là vật cản tĩnh đã biết (`park_clip` xử lý), không phải lý do khoá.
+    if (other.state === 'parked') {
+      continue;
+    }
+    if (overlapsPolygon(rectPolygon(carRect(other)), zone)) {
+      return false;
+    }
+    if (skipLookahead) {
+      continue;
+    }
+    // Luật 1 (phần "không xe nào sắp tới"): xe đang chạy mà tới vùng trong `reverseSeconds`.
+    if (other.route === undefined || Math.abs(other.v) <= YIELD_CORRIDOR_MIN_SPEED_MPS) {
+      continue;
+    }
+    const reach = Math.abs(other.v) * reverseSeconds + other.length;
+    const distance = Math.hypot(other.pose.x - car.pose.x, other.pose.y - car.pose.y);
+    if (distance > reach) {
+      continue;
+    }
+    // Chỉ tính khi nó **thật sự đi qua** vùng, không phải chạy ở làn khác.
+    const hitsZone = zone.some((corner) => {
+      const projection = progressOnRoute(other.route as Route, corner);
+      return projection.lateral <= (other.width + car.width) / 2 + 1 && projection.s > (other.route_s ?? 0);
+    });
+    if (hitsZone) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * P17m — vì sao KHÔNG dùng điều tiết cổng vào (`starvationThrottle`).
+ *
+ * Tôi đã thử (TASK_P17d "chống đói"): giữ xe mới ở cổng khi có xe chờ ra quá lâu. Số lách giảm rất
+ * mạnh (tổng 12 kịch bản 380 → 152) **nhưng `loadSuites.test.ts` đỏ 4/13** với
+ * `abandoned queue`: xe bị giữ ở cổng quá `QUEUE_WAIT_FRAMES_LIMIT` (500 frame) trong lúc cổng vào
+ * trống, đúng định nghĩa "bị bỏ quên". Cộng thêm `unfinished` tăng (xe `queued` ở cuối video).
+ *
+ * Theo lead review P17m mục 1: nếu xe cuối video còn `queued` thì cách xử là **kéo dài video**
+ * (`gen_load_suites.py`, coders khác lo), không phải nới ghost. Vì vậy ở đây bỏ điều tiết, giữ
+ * `exitGapClear` + thứ tự toàn phần.
+ */
 
 function canStartExit(lot: LotMap, network: RoadNetwork, car: CarState): Route | null {
   if (car.slot === null) {
@@ -1434,6 +1655,7 @@ function yieldSpeedFor(
   routeS: number,
   cars: readonly CarState[],
   world: PriorityWorld,
+  outGateCars: readonly GateCar[] = [],
 ): number | null {
   if (car.state === 'parked' || car.state === 'queued' || car.state === 'exited') {
     return null;
@@ -1486,7 +1708,20 @@ function yieldSpeedFor(
       // làn) ⇒ chờ vòng (đo ở K4: V004 nhường V003, V003 chờ V004 rời vùng).
       (other.state === 'entering' ||
         other.state === 'driving_to_slot' ||
-        other.state === 'driving_to_exit')
+        other.state === 'driving_to_exit') &&
+      // P17k: xe ĐANG ĐỨNG YÊN thì KHÔNG có "quỹ đạo kế tiếp" — nó không quét thêm mét nào. Trước
+      // bản vá này, hành lang 6 m phía trước của một xe đã dừng vẫn bị coi là vật cản, nên xe khác
+      // phanh nhường một khoảng đường trống: đo được ở C4 (V067 đứng `rs=75,4`, pose (−30,4; 3,4),
+      // cách V065 **9 m** mà V065 `v = 0`) ⇒ kẹt 150 frame rồi `ghost_pass`. Đây là "chặn ảo":
+      // `yieldSpeedFor` chỉ cần xe kia đứng yên tại chỗ, thân nó đã được tính riêng ở `otherRect`.
+      // Khi nó nhích lại (v > 0) hành lang tự có lại.
+      Math.abs(other.v) > YIELD_CORRIDOR_MIN_SPEED_MPS &&
+      // P17k (lead, ANS_31 mục 1): xe đang bị **giữ ở hàng chờ cổng ra** thì không sắp đi vào vùng
+      // giao — nó đứng chờ xe trước qua cổng. Nếu tính hành lang của nó thì xe khác phanh nhường
+      // một xe đang CHỜ, thành chuỗi chờ (đo ở B1: V056 nhường V045 cách 9 m trong khi V045 bị
+      // `GATE_QUEUE_HOLD_M` giữ lại). Chỉ tính hành lang khi nó **thực sự sẽ đi** — đang chạy, hoặc
+      // đang bị chặn bởi thứ khác chứ không phải hàng chờ cổng.
+      !heldAtOutGate(other, outGateCars)
     ) {
       const otherS = other.route_s ?? 0;
       const corridorEnd = Math.min(other.route.length_m, otherS + YIELD_CORRIDOR_AHEAD_M);
@@ -1551,10 +1786,11 @@ function yieldSpeedFor(
       continue;
     }
     // Còn xa thì phanh dần theo quãng còn lại; tới sát thì dừng hẳn (không tiến tới mức chạm).
-    limit = Math.min(
-      limit ?? Number.POSITIVE_INFINITY,
-      Math.sqrt(2 * MAX_ACCEL_MPS2 * Math.max(0, conflictAt - YIELD_CLEARANCE_M - 0.5)),
-    );
+    const thisLimit = Math.sqrt(2 * MAX_ACCEL_MPS2 * Math.max(0, conflictAt - YIELD_CLEARANCE_M - 0.5));
+    if (thisLimit < 0.3) {
+      noteWait(car.id, `yield:${other.id}`);
+    }
+    limit = Math.min(limit ?? Number.POSITIVE_INFINITY, thisLimit);
   }
   return limit;
 }
@@ -1686,6 +1922,8 @@ function clipCheck(
         continue;
       }
     }
+    noteWait(car.id, `clip:${other.id}`);
+    lastClipBlocker = other;
     return 'blocked';
   }
   return pendingEscalation;
@@ -1805,6 +2043,36 @@ const YIELD_CORRIDOR_CHUNK_M = 1.5;
 const YIELD_LOOKAHEAD_M = 10;
 
 /**
+ * Tốc độ tối thiểu để coi xe kia là "đang chạy" và tính hành lang quỹ đạo phía trước của nó, m/s
+ * (P17k).
+ *
+ * Xe đứng yên chỉ chiếm đúng thân nó — phần đó đã được tính bằng `otherRect`, không cần cộng thêm
+ * 6 m đường phía trước. Cộng thêm thì một xe **đã dừng** (ví dụ đang chờ ở làn ra) chặn oan mọi xe
+ * cách nó tới 9 m, và những xe đó kẹt 150 frame rồi bị đẩy sang `ghost_pass` (đo ở C4: V067 phải
+ * nhường V065 đứng yên cách 9 m). Ngưỡng nhỏ để xe nhích chậm vẫn được tính.
+ */
+const YIELD_CORRIDOR_MIN_SPEED_MPS = 0.05;
+
+/**
+ * Xe có đang bị **giữ ở hàng chờ cổng ra** không (P17k, theo ANS_31 mục 1 của lead).
+ *
+ * Điều kiện y hệt khối chặn cổng trong `advanceCar`: `driving_to_exit`, còn cách cổng ≤
+ * `GATE_QUEUE_HOLD_M`, và `canEnterGate` từ chối vì **có xe khác đang trong cổng**. Khi đó xe này
+ * không sắp tiến vào vùng giao nào — nó chờ xe trước qua cổng — nên hành lang 6 m phía trước của nó
+ * không được dùng để bắt xe khác nhường (sẽ thành chuỗi chờ: A nhường B, B chờ cổng).
+ */
+function heldAtOutGate(other: CarState, outGateCars: readonly GateCar[]): boolean {
+  if (other.state !== 'driving_to_exit') {
+    return false;
+  }
+  const own = outGateCars.find((candidate) => candidate.id === other.id);
+  if (own === undefined || own.distance_m <= 0 || own.distance_m > GATE_QUEUE_HOLD_M) {
+    return false;
+  }
+  return !canEnterGate(outGateCars, other.id).ok;
+}
+
+/**
  * Mức xuyên tối đa coi là "áp thân", không phải va chạm thật, m (P5f, ANS_coders-2_3 mục 3).
  *
  * Dùng cho nhánh "bước tách ra": khi hai xe đã chạm ở mức này, cho phép bước **làm xa ra**. Một
@@ -1886,7 +2154,270 @@ function overlapsPolygon(rect: readonly Vec2[], polygon: readonly Vec2[]): boole
   return polygonsIntersect([...rect], polygon);
 }
 
+const MERGE_CELLS = new WeakMap<RoadNetwork, readonly MergeCell[]>();
+const ROUTE_CELL_PASSES = new WeakMap<Route, readonly RouteCellPass[]>();
+
+function cellPassesOf(network: RoadNetwork, route: Route): readonly RouteCellPass[] {
+  let passes = ROUTE_CELL_PASSES.get(route);
+  if (passes === undefined) {
+    let cells = MERGE_CELLS.get(network);
+    if (cells === undefined) {
+      cells = findMergeCells(network);
+      MERGE_CELLS.set(network, cells);
+    }
+    passes = routeCellPasses(routePositions(route), cells);
+    ROUTE_CELL_PASSES.set(route, passes);
+  }
+  return passes;
+}
+
+/** Hai hướng vào nút là cùng một dòng xe (cos > 0,9). */
+function sameStream(a: Vec2, b: Vec2): boolean {
+  return a[0] * b[0] + a[1] * b[1] > 0.9;
+}
+
+/**
+ * P17 (ANS_36) — **hộp vàng ở nút nhập làn**. Xe chưa vào vùng nút chỉ vào khi (1) không có xe của
+ * DÒNG KHÁC đang nằm trong vùng, và (2) không có xe dòng khác "tới trước" (gần mép vùng hơn, hoặc bằng
+ * nhau thì id nhỏ hơn) đang chạy tới. Nhờ vậy xe đầu hàng không dừng trong vùng quét của xe đang cua
+ * nhập làn (ca V037/V070: xe đầu hàng A2 đứng ngay điểm nhập, xe từ V_far_w cua vào bị thân nó chặn,
+ * còn xe đầu hàng lại chờ chính xe đó ⇒ khoá). Trả giới hạn tốc độ (dừng được trước mép vùng) hoặc `null`.
+ *
+ * Thứ tự "tới trước" là thứ tự toàn phần ổn định (khoảng cách tới mép, rồi id) và xe nhường đứng yên
+ * còn xe được đi thì giảm khoảng cách ⇒ không có vòng chờ giữa hai xe.
+ */
+function mergeCellLimit(
+  network: RoadNetwork,
+  car: CarState,
+  route: Route,
+  routeS: number,
+  cars: readonly CarState[],
+): number | null {
+  if (!CRUISE_STATES.has(car.state)) {
+    return null;
+  }
+  const passes = cellPassesOf(network, route);
+  let limit: number | null = null;
+  for (const pass of passes) {
+    const edgeS = pass.sNode - MERGE_CELL_RADIUS_M;
+    const dEdge = edgeS - (routeS + car.length / 2);
+    if (dEdge < -0.2 || dEdge > 14) {
+      continue;
+    }
+    let blocked = false;
+    for (const other of cars) {
+      if (other.id === car.id || !CRUISE_STATES.has(other.state) || other.route === undefined) {
+        continue;
+      }
+      const otherPass = cellPassesOf(network, other.route).find((item) => item.cell.id === pass.cell.id);
+      const distToNode = Math.hypot(
+        other.pose.x - pass.cell.point[0],
+        other.pose.y - pass.cell.point[1],
+      );
+      const sameDir =
+        otherPass !== undefined
+          ? sameStream(otherPass.inDir, pass.inDir)
+          : Math.cos(other.pose.th - Math.atan2(pass.inDir[1], pass.inDir[0])) > 0.7;
+      if (sameDir) {
+        continue;
+      }
+      const otherEdge =
+        otherPass === undefined
+          ? Number.NEGATIVE_INFINITY
+          : otherPass.sNode - MERGE_CELL_RADIUS_M - ((other.route_s ?? 0) + other.length / 2);
+      // Đã VÀO vùng: mũi xe qua mép vùng (có lộ trình qua nút) hoặc thân nằm trong vùng (không qua nút).
+      const inside =
+        otherPass === undefined
+          ? distToNode < MERGE_CELL_RADIUS_M + other.length / 2
+          : otherEdge <= 0 && other.route_s !== undefined && (other.route_s ?? 0) - other.length / 2 < otherPass.sNode + 1;
+      if (inside) {
+        noteWait(car.id, `merge_occupant:${other.id}`);
+        blocked = true;
+        break;
+      }
+      if (otherPass === undefined) {
+        continue;
+      }
+      const comingFirst =
+        otherEdge > -0.2 &&
+        otherEdge < 10 &&
+        (Math.abs(other.v) > 0.3 || otherEdge < 2) &&
+        (otherEdge < dEdge - 1e-6 || (Math.abs(otherEdge - dEdge) <= 1e-6 && other.id < car.id));
+      if (comingFirst) {
+        noteWait(car.id, `merge_claim:${other.id}`);
+        blocked = true;
+        break;
+      }
+    }
+    if (blocked) {
+      const allowed = Math.sqrt(2 * MAX_ACCEL_MPS2 * Math.max(0, dEdge - 0.4));
+      limit = Math.min(limit ?? Number.POSITIVE_INFINITY, allowed);
+    }
+  }
+  return limit;
+}
+
+/** Trạng thái chạy trên làn: các xe này mới bám xe/lùi dây chuyền. */
+const CRUISE_STATES: ReadonlySet<CarStateName> = new Set<CarStateName>([
+  'entering',
+  'driving_to_slot',
+  'driving_to_exit',
+]);
+
+/** Tốc độ lùi dây chuyền, m/s, và khoảng hở tối thiểu giữ khi lùi, m. */
+const CHAIN_BACK_SPEED_MPS = 0.8;
+const CHAIN_BACK_CLEARANCE_M = 0.1;
+/** Xe phía trước được coi là "ngay trước" khi nằm trong cự ly này dọc hướng xe, m. */
+const CHAIN_LEADER_RANGE_M = 9;
+
+/** `other` nằm phía TRƯỚC `car` (theo hướng xe), cùng làn (lệch ngang nhỏ), trong tầm. */
+function isLeaderCandidate(car: CarState, other: CarState): boolean {
+  const dx = other.pose.x - car.pose.x;
+  const dy = other.pose.y - car.pose.y;
+  const along = dx * Math.cos(car.pose.th) + dy * Math.sin(car.pose.th);
+  const across = -dx * Math.sin(car.pose.th) + dy * Math.cos(car.pose.th);
+  return (
+    along > 0 &&
+    along <= CHAIN_LEADER_RANGE_M &&
+    Math.abs(across) <= (car.width + other.width) / 2 + 0.6 &&
+    Math.cos(car.pose.th - other.pose.th) > 0.3
+  );
+}
+
+/**
+ * P17 (ANS_37 mục 4) — **lùi dây chuyền**. Xe `car` lùi dọc lộ trình của nó khi xe ngay trước đang bị
+ * chính nó chặn, hoặc khi xe ngay trước phải lùi mà không lùi được. Chỉ lùi khi phía sau đủ chỗ;
+ * không đủ chỗ thì phát `back_demand` cho xe phía sau lùi trước (xe CUỐI chuỗi lùi đầu tiên).
+ */
+function tryChainBackOff(
+  car: CarState,
+  cars: readonly CarState[],
+  dtS: number,
+): CarState | null {
+  if (!CRUISE_STATES.has(car.state) || car.route === undefined || car.ghost_from_route_s !== undefined) {
+    return null;
+  }
+  const routeS = car.route_s ?? 0;
+  // Chỉ lùi trên đoạn LÀN (đi tiến): không lùi vào đoạn lùi-ra-ô (đầu lộ trình ra) hay đoạn cung vào ô.
+  const laneStart = (car.route.maneuver_end_s ?? 0) + 0.5;
+  const laneEnd = (car.route.slot_start_s ?? Number.POSITIVE_INFINITY) - 1;
+  if (routeS < laneStart + CHAIN_BACK_SPEED_MPS * dtS || routeS > laneEnd) {
+    return null;
+  }
+  const active = cars.filter((other) => other.id !== car.id && other.state !== 'exited');
+  let leader: CarState | undefined;
+  let leaderAlong = Number.POSITIVE_INFINITY;
+  for (const other of active) {
+    if (other.state === 'parked' || !isLeaderCandidate(car, other)) {
+      continue;
+    }
+    const along =
+      (other.pose.x - car.pose.x) * Math.cos(car.pose.th) +
+      (other.pose.y - car.pose.y) * Math.sin(car.pose.th);
+    if (along < leaderAlong) {
+      leaderAlong = along;
+      leader = other;
+    }
+  }
+  const toCandidate = (item: CarState) => ({
+    id: item.id,
+    blockedBy: item.blocked_by,
+    backDemand: item.back_demand,
+  });
+  const blockerCar =
+    car.blocked_by === undefined ? undefined : active.find((other) => other.id === car.blocked_by);
+  if (
+    !shouldBackOff(
+      toCandidate(car),
+      leader === undefined ? undefined : toCandidate(leader),
+      active.map(toCandidate),
+    ) &&
+    !shouldYieldByBacking(
+      toCandidate(car),
+      blockerCar === undefined ? undefined : toCandidate(blockerCar),
+    )
+  ) {
+    return null;
+  }
+  const step = Math.min(CHAIN_BACK_SPEED_MPS * dtS, routeS);
+  const movedTo = routeS - step;
+  const positions = routePositions(car.route);
+  const sample = pointAtDistance(positions, movedTo);
+  const backRect = inflateRect(
+    {
+      center: [sample.point[0], sample.point[1]] as Vec2,
+      heading: sample.heading,
+      length: car.length,
+      width: car.width,
+    },
+    CHAIN_BACK_CLEARANCE_M,
+  );
+  const blocked = active.some(
+    (other) => penetrationDepth(backRect, carRect(other)) > COLLISION_EPS_M,
+  );
+  if (blocked) {
+    noteWait(car.id, 'chain_back_blocked');
+    return { ...car, v: 0, back_demand: true, blocked_by: undefined };
+  }
+  noteWait(car.id, 'chain_backing');
+  return {
+    ...car,
+    pose: { x: round6(sample.point[0]), y: round6(sample.point[1]), th: round6(sample.heading) },
+    route_s: round6(movedTo),
+    v: round6(-CHAIN_BACK_SPEED_MPS),
+    back_demand: undefined,
+    blocked_by: undefined,
+  };
+}
+
 function advanceCar(
+  lot: LotMap,
+  network: RoadNetwork,
+  car: CarState,
+  cars: readonly CarState[],
+  reservations: readonly Reservation[],
+  outGateCars: readonly GateCar[],
+  world: PriorityWorld,
+  nextFrame: number,
+  dtS: number,
+  clipWarnings: Warning[],
+  ghostPasses: ReadonlySet<string> = new Set<string>(),
+): CarState {
+  const backed = tryChainBackOff(car, cars, dtS);
+  if (backed !== null) {
+    return backed;
+  }
+  lastClipBlocker = null;
+  const next = advanceCarCore(
+    lot,
+    network,
+    car,
+    cars,
+    reservations,
+    outGateCars,
+    world,
+    nextFrame,
+    dtS,
+    clipWarnings,
+    ghostPasses,
+  );
+  // Xe bị chặn bởi thân xe đang nằm SAU nó (cua nhập làn quét vào đầu hàng) ⇒ ghi lại để xe sau lùi.
+  const blocker = lastClipBlocker as CarState | null;
+  const blockedBy =
+    blocker !== null &&
+    next.route_s === car.route_s &&
+    CRUISE_STATES.has(car.state) &&
+    CRUISE_STATES.has(blocker.state) &&
+    isBehind(car, blocker)
+      ? blocker.id
+      : undefined;
+  if (blockedBy === next.blocked_by && next.back_demand === undefined) {
+    return next;
+  }
+  return { ...next, blocked_by: blockedBy, back_demand: undefined };
+}
+
+function advanceCarCore(
   lot: LotMap,
   network: RoadNetwork,
   car: CarState,
@@ -1908,6 +2439,13 @@ function advanceCar(
       nextFrame >= car.park_until_frame
     ) {
       const exitRoute = canStartExit(lot, network, car);
+      // P17m (ANS_32 + TASK_P17d luật 1): **chấp nhận khoảng trống trước khi lùi ra.** Chỉ bắt
+      // đầu `leaving_slot` khi vùng quét của thao tác lùi ra đang trống. Nếu không, xe **ở yên
+      // trong ô** (vẫn `parked`) — đúng luật 1, và trạng thái đó không tính là kẹt.
+      //
+      if (exitRoute !== null && !exitGapClear(lot, car, exitRoute, cars)) {
+        return car;
+      }
       if (exitRoute !== null) {
         return {
           ...car,
@@ -1956,6 +2494,7 @@ function advanceCar(
   }
 
   if ((state === 'parking_in' || state === 'leaving_slot') && !hasReservation) {
+    noteWait(car.id, 'need_zone');
     targetSpeed = 0;
   }
 
@@ -1989,7 +2528,7 @@ function advanceCar(
       // Xong: về luật bình thường. GIỮ `ghost_since_frame` làm dấu "đã từng lách" để va chạm về
       // sau (nếu còn) được phân loại `ghost_pass` chứ không phải `collision`; chỉ xoá dấu "đang
       // lách" để xe còn được xét lách lại khi kẹt lần nữa.
-      return advanceCar(lot, network, {
+      return advanceCarCore(lot, network, {
         ...car,
         ghost_from_route_s: undefined,
       }, cars, reservations, outGateCars, world, nextFrame, dtS, clipWarnings, ghostPasses);
@@ -2087,10 +2626,14 @@ function advanceCar(
     };
   }
 
-  // P5e (B2b): chỉ **giữ chỗ chờ cổng** khi đã gần cổng. `canEnterGate` trả false khi còn xe
-  // khác trong đoạn cổng — nhưng nếu áp ở MỌI khoảng cách thì xe còn cách cổng >100 m cũng
-  // đứng yên (đo được ở K7: V002 rs=11,1/126,4 với cổng còn 115 m mà v=0 suốt 2383 frame).
-  // Dùng ngưỡng theo **quãng đường còn lại**: chỉ dừng khi sắp vào đoạn cổng.
+  // P17m (ANS_32 mục 2): **thứ tự cổng chỉ áp cho xe còn `queued` ngoài bãi.** Xe đã vào bãi
+  // (`driving_to_exit`) không chờ "thứ tự cổng" nữa — nó chỉ dừng khi **thật sự có xe đang chiếm
+  // đoạn cổng**. Trước đây khối này bắt xe ra phải là "đầu hàng" mới được đi, mà "đầu hàng" tính
+  // theo quãng đường còn lại — thước đo đó KHÔNG đồng bộ với `yieldsTo`, nên sinh vòng chờ:
+  //   V044 (leaving_slot) chờ cấp vùng ← V045 (làn nam) chờ thứ tự cổng ← V022 (đầu hàng cổng)
+  //   nhường claim của V044  ⇒ không ai đi được.
+  // Nay bỏ hẳn khái niệm "đầu hàng" cho xe đã vào bãi: chỉ còn ràng buộc VẬT LÝ (không có xe đang
+  // nằm trong đoạn cổng), và `clipCheck`/`leaderGap` lo phần không chạm nhau.
   if (state === 'driving_to_exit') {
     const own = outGateCars.find((candidate) => candidate.id === car.id);
     if (
@@ -2099,31 +2642,11 @@ function advanceCar(
       own.distance_m <= GATE_QUEUE_HOLD_M
     ) {
       const decision = canEnterGate(outGateCars, car.id);
-      if (!decision.ok) {
-        // Lead (sau ANS_11): "xe đầu hàng chờ cổng" tính theo quãng đường còn lại, còn nhường
-        // nhau ở ngã nhập làn tính theo `yieldsTo`. Hai thước đo này có thể ngược nhau (K5: V018
-        // trên V_far_w gần cổng hơn nên là đầu hàng, nhưng phải nhường V007 đang đi trên A2 ⇒
-        // V007 chờ V018 vì cổng, V018 chờ V007 vì nhập làn ⇒ chờ vòng). Giữ chỗ cổng chỉ khi
-        // chặn thật (có xe đang trong cổng) hoặc đầu hàng KHÔNG phải nhường mình.
-        const ahead = outGateCars
-          .filter((other) => other.id !== car.id && other.distance_m > 0 && other.distance_m < own.distance_m)
-          .map((other) => cars.find((candidate) => candidate.id === other.id))
-          .filter((other): other is CarState => other !== undefined);
-        // P17g: đầu hàng đã đứng yên lâu (nó đang chờ thứ gì đó mà MÌNH có thể là một phần của vòng
-        // chờ: B1 V045 chờ V022 theo thứ tự cổng, V022 nhường V044, V044 chờ V045 rời vùng) thì
-        // không giữ chỗ theo thứ tự cổng nữa — cho xe sau đi tiếp để vòng vỡ ra.
-        const headStale =
-          decision.occupantId === null &&
-          ahead.length > 0 &&
-          ahead.every((other) => (other.still_frames ?? 0) >= GATE_HEAD_STALE_FRAMES);
-        const headYieldsToMe =
-          headStale ||
-          (decision.occupantId === null &&
-            ahead.length > 0 &&
-            ahead.every((other) => yieldsTo(other, car, world)));
-        if (!headYieldsToMe) {
-          targetSpeed = 0;
-        }
+      // Chỉ chặn khi có XE ĐANG CHIẾM đoạn cổng (`occupantId`). `occupantId === null` nghĩa là cổng
+      // trống và lý do từ chối chỉ là "mình chưa phải đầu hàng" — đúng thứ tự mà P17m bỏ.
+      if (!decision.ok && decision.occupantId !== null) {
+        noteWait(car.id, `gate_out:${decision.occupantId}`);
+        targetSpeed = 0;
       }
     }
   }
@@ -2137,7 +2660,12 @@ function advanceCar(
         gap: leader.gap,
         carLength: car.length,
       });
-      targetSpeed = Math.min(targetSpeed, decision.targetSpeed);
+      if (decision.targetSpeed < 0.3 && leader.id !== undefined) {
+        noteWait(car.id, `leader:${leader.id}`);
+      }
+      // P17 (ANS_37): bám xe kiểu IDM — giảm tốc êm từ xa, không nhanh hơn xe trước khi đã gần.
+      const idmSpeed = idmTargetSpeed(Math.abs(car.v), desired, leader.gap, leader.speed, dtS);
+      targetSpeed = Math.min(targetSpeed, decision.targetSpeed, idmSpeed);
     }
   }
 
@@ -2158,9 +2686,15 @@ function advanceCar(
   const yieldSpeedLimit =
     isVip || maneuverInProgress
       ? null
-      : yieldSpeedFor(lot, car, route, routeS, cars, world);
+      : yieldSpeedFor(lot, car, route, routeS, cars, world, outGateCars);
   if (yieldSpeedLimit !== null) {
     targetSpeed = Math.min(targetSpeed, yieldSpeedLimit);
+  }
+  if (!isVip && !maneuverInProgress) {
+    const cellLimit = mergeCellLimit(network, car, route, routeS, cars);
+    if (cellLimit !== null) {
+      targetSpeed = Math.min(targetSpeed, cellLimit);
+    }
   }
 
   // P5g: lùi nhường khi đứng kẹt. Phải xét được **cả hai** kiểu: mình phải nhường ai (lùi để nó
@@ -2261,6 +2795,7 @@ function advanceCar(
     // xử cho vùng hẹp (thao tác trong ô, góc cua, nút giao — ANS_P10a mục 5), nên xe nhường
     // dừng **trước biên** vùng, không bao giờ tiến tới mức chạm thân.
     if (!isVip && !maneuverInProgress && reservationBlocks(car, proposed, current, world)) {
+      noteWait(car.id, 'reservation');
       return { ...car, pose: car.pose, v: 0, route_s: routeS, state };
     }
     const clip = clipCheck(lot, car, state, proposed, cars, world, nextFrame);

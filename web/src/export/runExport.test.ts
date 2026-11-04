@@ -408,14 +408,15 @@ describe('export/runExport — vòng chạy bình thường', () => {
     expect(result.exportLog.warnings.join(' ')).toContain('1 cam');
   });
 
-  it('history ngắn hơn totalFrames thì ném lỗi (P5b ghi chú 7)', async () => {
+  it('sim.at trả sai số frame thì ném lỗi (GT cần đủ mọi frame liên tiếp; P5b ghi chú 7, P17n)', async () => {
     const sim = makeSim(makeScenario('2cam'), 10);
     await expect(
       runExport({
         ...BASE_OPTIONS,
         sim: {
           ...sim,
-          runToEnd: () => sim.runToEnd().slice(0, 5),
+          // frame 5 bị lặp lại: GT theo luồng sẽ thiếu một frame.
+          at: (frame: number) => sim.at(frame === 6 ? 5 : frame),
         },
         renderer: makeRenderer(),
         encoders: () => makeEncoder(),
@@ -423,7 +424,7 @@ describe('export/runExport — vòng chạy bình thường', () => {
         clock: makeClock(),
         pause: makePause(),
       }),
-    ).rejects.toThrow(/history có 5 frame/);
+    ).rejects.toThrow(/GT cần đủ mọi frame liên tiếp/);
   });
 
   it('renderer trả sai kích thước ⇒ lỗi, không đẩy lên BE', async () => {
@@ -626,5 +627,72 @@ describe('export/runExport — D12: tạm dừng, huỷ, encoder lỗi', () => {
 describe('export/runExport — hằng số xuất', () => {
   it('3 đầu ra đúng danh sách của BE', () => {
     expect(EXPORT_OUTPUTS).toEqual(['full', 'cam1', 'cam2']);
+  });
+});
+
+describe('export/runExport — video dòng (P17n, ANS_34)', () => {
+  it('BE hỗ trợ ghi theo khúc ⇒ encoder dòng đẩy video qua sink, không PUT nguyên file mp4', async () => {
+    const backend = makeBackend();
+    const parts: Array<{ name: string; offset: number; size: number }> = [];
+    const committed: string[] = [];
+    const streamingBackend = {
+      ...backend,
+      putRunPart: (_run: string, name: string, offset: number, data: Uint8Array) => {
+        parts.push({ name, offset, size: data.length });
+        return Promise.resolve();
+      },
+      commitRunPart: (_run: string, name: string) => {
+        committed.push(name);
+        return Promise.resolve();
+      },
+    };
+    const sinkSeen: Array<unknown> = [];
+    const result = await runExport({
+      ...BASE_OPTIONS,
+      sim: makeSim(makeScenario('2cam'), 4),
+      renderer: makeRenderer(),
+      encoders: (_output, _size, sink) => {
+        sinkSeen.push(sink);
+        const encoder: FrameEncoder = {
+          streamed: true,
+          addFrame: () => Promise.resolve(),
+          finish: async () => {
+            await sink?.write(new Uint8Array([1, 2, 3, 4]), 0);
+            await sink?.commit();
+            return null;
+          },
+          abort: () => Promise.resolve(),
+        };
+        return encoder;
+      },
+      backend: streamingBackend,
+      clock: makeClock(),
+      pause: makePause(),
+    });
+    expect(sinkSeen.every((sink) => sink !== null && sink !== undefined)).toBe(true);
+    expect(parts.map((part) => part.name).sort()).toEqual(['raw_cam1.mp4', 'raw_cam2.mp4', 'raw_full.mp4']);
+    expect(committed.sort()).toEqual(['raw_cam1.mp4', 'raw_cam2.mp4', 'raw_full.mp4']);
+    // không PUT nguyên file mp4 và không cảnh báo "không tạo được file"
+    expect([...backend.files.keys()].some((key) => key.endsWith('.mp4'))).toBe(false);
+    expect(result.exportLog.warnings.join(' ')).not.toContain('không tạo được file');
+  });
+
+  it('BE không hỗ trợ ghi theo khúc ⇒ sink = null, đường cũ (PUT nguyên file)', async () => {
+    const backend = makeBackend();
+    const sinks: Array<unknown> = [];
+    await runExport({
+      ...BASE_OPTIONS,
+      sim: makeSim(makeScenario('2cam'), 3),
+      renderer: makeRenderer(),
+      encoders: (_output, _size, sink) => {
+        sinks.push(sink);
+        return makeEncoder();
+      },
+      backend,
+      clock: makeClock(),
+      pause: makePause(),
+    });
+    expect(sinks.every((sink) => sink === null)).toBe(true);
+    expect(backend.files.has('run-1/raw_full.mp4')).toBe(true);
   });
 });

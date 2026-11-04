@@ -1005,3 +1005,18 @@ select {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* ANS_29: xe đi xuyên nhau (ghost_pass) — cảnh báo đỏ, không được im lặng. */
+.ghost-alert {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 2px solid #ff3b30;
+  background: rgba(255, 59, 48, 0.16);
+  color: #ff6b61;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.ghost-alert b {
+  color: #ff3b30;
+}
